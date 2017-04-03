@@ -116,22 +116,24 @@
 
 /* default target is I386 */
 #if !defined(TCC_TARGET_I386) && !defined(TCC_TARGET_ARM) && \
-    !defined(TCC_TARGET_C67) && !defined(TCC_TARGET_X86_64)
+    !defined(TCC_TARGET_C67) && !defined(TCC_TARGET_X86_64) && \
+    !defined(TCC_TARGET_AVR)
 #define TCC_TARGET_I386
 #endif
 
 #if !defined(TCC_UCLIBC) && !defined(TCC_TARGET_ARM) && \
-    !defined(TCC_TARGET_C67) && !defined(TCC_TARGET_X86_64)
+    !defined(TCC_TARGET_C67) && !defined(TCC_TARGET_X86_64) && \
+    !defined(TCC_TARGET_AVR)
 #define CONFIG_TCC_BCHECK /* enable bound checking code */
 #endif
 
 /* define it to include assembler support */
-#if !defined(TCC_TARGET_ARM) && !defined(TCC_TARGET_C67)
+#if !defined(TCC_TARGET_ARM) && !defined(TCC_TARGET_C67) && !defined(TCC_TARGET_AVR)
 #define CONFIG_TCC_ASM
 #endif
 
 /* object format selection */
-#if defined(TCC_TARGET_C67)
+#if defined(TCC_TARGET_C67) || defined(TCC_TARGET_AVR)
 #define TCC_TARGET_COFF
 #endif
 
@@ -240,6 +242,10 @@
 #ifdef TCC_TARGET_C67
 # include "coff.h"
 # include "c67-gen.c"
+#endif
+#ifdef TCC_TARGET_AVR
+# include "coff.h"
+# include "avr-gen.c"
 #endif
 #undef TARGET_DEFS_ONLY
 
@@ -1188,7 +1194,7 @@ ST_FUNC void gexpr(void);
 ST_FUNC int expr_const(void);
 ST_FUNC void gen_inline_functions(void);
 ST_FUNC void decl(int l);
-#if defined CONFIG_TCC_BCHECK || defined TCC_TARGET_C67
+#if defined CONFIG_TCC_BCHECK || defined TCC_TARGET_C67 || defined TCC_TARGET_AVR
 ST_FUNC Sym *get_sym_ref(CType *type, Section *sec, unsigned long offset, unsigned long size);
 #endif
 
@@ -1270,7 +1276,7 @@ ST_FUNC void gen_opf(int op);
 ST_FUNC void gen_cvt_ftoi(int t);
 ST_FUNC void gen_cvt_ftof(int t);
 ST_FUNC void ggoto(void);
-#ifndef TCC_TARGET_C67
+#if !defined(TCC_TARGET_C67) && !defined(TCC_TARGET_AVR)
 ST_FUNC void o(unsigned int c);
 #endif
 #ifndef TCC_TARGET_ARM
@@ -1307,6 +1313,10 @@ ST_FUNC void gen_cvt_itof1(int t);
 
 /* ------------ c67-gen.c ------------ */
 #ifdef TCC_TARGET_C67
+#endif
+
+/* ------------ avr-gen.c ------------ */
+#ifdef TCC_TARGET_AVR
 #endif
 
 /* ------------ tcccoff.c ------------ */

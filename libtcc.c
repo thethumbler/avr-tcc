@@ -51,6 +51,9 @@ ST_DATA struct TCCState *tcc_state;
 #ifdef TCC_TARGET_X86_64
 #include "x86_64-gen.c"
 #endif
+#ifdef TCC_TARGET_AVR
+#include "avr-gen.c"
+#endif
 #ifdef CONFIG_TCC_ASM
 #include "tccasm.c"
 #if defined TCC_TARGET_I386 || defined TCC_TARGET_X86_64

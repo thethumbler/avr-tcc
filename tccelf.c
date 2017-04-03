@@ -802,6 +802,32 @@ ST_FUNC void relocate_section(TCCState *s1, Section *s)
             fprintf(stderr,"FIXME: handle reloc type %x at %x [%p] to %x\n",
                 type, (unsigned)addr, ptr, (unsigned)val);
             break;
+#elif defined(TCC_TARGET_AVR)
+        case R_C60_32:
+            *(int *)ptr += val;
+            break;
+        case R_C60LO16:
+            {
+                uint32_t orig;
+                
+                /* put the low 16 bits of the absolute address */
+                // add to what is already there
+                
+                orig  =   ((*(int *)(ptr  )) >> 7) & 0xffff;
+                orig |=  (((*(int *)(ptr+4)) >> 7) & 0xffff) << 16;
+                
+                //patch both at once - assumes always in pairs Low - High
+                
+                *(int *) ptr    = (*(int *) ptr    & (~(0xffff << 7)) ) |  (((val+orig)      & 0xffff) << 7);
+                *(int *)(ptr+4) = (*(int *)(ptr+4) & (~(0xffff << 7)) ) | ((((val+orig)>>16) & 0xffff) << 7);
+            }
+            break;
+        case R_C60HI16:
+            break;
+        default:
+            fprintf(stderr,"FIXME: handle reloc type %x at %x [%p] to %x\n",
+                type, (unsigned)addr, ptr, (unsigned)val);
+            break;
 #elif defined(TCC_TARGET_X86_64)
         case R_X86_64_64:
             if (s1->output_type == TCC_OUTPUT_DLL) {
@@ -1126,6 +1152,8 @@ static void put_got_entry(TCCState *s1,
         }
 #elif defined(TCC_TARGET_C67)
         tcc_error("C67 got not implemented");
+#elif defined(TCC_TARGET_AVR)
+        tcc_error("AVR got not implemented");
 #else
 #error unsupported CPU
 #endif
@@ -1200,6 +1228,25 @@ ST_FUNC void build_got_entries(TCCState *s1)
                 }
                 break;
 #elif defined(TCC_TARGET_C67)
+            case R_C60_GOT32:
+            case R_C60_GOTOFF:
+            case R_C60_GOTPC:
+            case R_C60_PLT32:
+                if (!s1->got)
+                    build_got(s1);
+                if (type == R_C60_GOT32 || type == R_C60_PLT32) {
+                    sym_index = ELFW(R_SYM)(rel->r_info);
+                    sym = &((ElfW(Sym) *)symtab_section->data)[sym_index];
+                    /* look at the symbol got offset. If none, then add one */
+                    if (type == R_C60_GOT32)
+                        reloc_type = R_C60_GLOB_DAT;
+                    else
+                        reloc_type = R_C60_JMP_SLOT;
+                    put_got_entry(s1, reloc_type, sym->st_size, sym->st_info, 
+                                  sym_index);
+                }
+                break;
+#elif defined(TCC_TARGET_AVR)
             case R_C60_GOT32:
             case R_C60_GOTOFF:
             case R_C60_GOTPC:
@@ -2087,6 +2134,8 @@ static int elf_output_file(TCCState *s1, const char *filename)
                         p += 16;
                     }
 #elif defined(TCC_TARGET_C67)
+                    /* XXX: TODO */
+#elif defined(TCC_TARGET_AVR)
                     /* XXX: TODO */
 #else
 #error unsupported CPU

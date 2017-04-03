@@ -188,6 +188,13 @@
      DEF(TOK__divd, "_divd")
      DEF(TOK__remi, "_remi")
      DEF(TOK__remu, "_remu")
+#elif defined(TCC_TARGET_AVR)
+     DEF(TOK__divi, "_divi")
+     DEF(TOK__divu, "_divu")
+     DEF(TOK__divf, "_divf")
+     DEF(TOK__divd, "_divd")
+     DEF(TOK__remi, "_remi")
+     DEF(TOK__remu, "_remu")
 #endif
 #ifdef TCC_TARGET_I386
      DEF(TOK___tcc_int_fpu_control, "__tcc_int_fpu_control")

@@ -857,6 +857,11 @@ ST_FUNC int gv(int rc)
         if ((vtop->type.t & VT_BTYPE) == VT_DOUBLE) 
             vtop->r2 = r+1;
 #endif
+#ifdef TCC_TARGET_AVR
+        /* uses register pairs for doubles */
+        if ((vtop->type.t & VT_BTYPE) == VT_DOUBLE) 
+            vtop->r2 = r+1;
+#endif
     }
     return r;
 }
@@ -1280,6 +1285,8 @@ static void gen_opl(int op)
                 b = ind;
                 o(0x1A000000 | encbranch(ind, 0, 1));
 #elif defined(TCC_TARGET_C67)
+                tcc_error("not implemented");
+#elif defined(TCC_TARGET_AVR)
                 tcc_error("not implemented");
 #else
 #error not supported
