@@ -80,6 +80,7 @@ ARM_VFP_CROSS = arm-vfp-tcc$(EXESUF)
 ARM_EABI_CROSS = arm-eabi-tcc$(EXESUF)
 ARM_CROSS = $(ARM_FPA_CROSS) $(ARM_FPA_LD_CROSS) $(ARM_VFP_CROSS) $(ARM_EABI_CROSS)
 C67_CROSS = c67-tcc$(EXESUF)
+AVR_CROSS = avr-tcc$(EXESUF)
 
 CORE_FILES = tcc.c libtcc.c tccpp.c tccgen.c tccelf.c tccasm.c tccrun.c
 CORE_FILES += tcc.h config.h libtcc.h tcctok.h
@@ -90,6 +91,7 @@ WINCE_FILES = $(CORE_FILES) arm-gen.c tccpe.c
 X86_64_FILES = $(CORE_FILES) x86_64-gen.c i386-asm.c x86_64-asm.h
 ARM_FILES = $(CORE_FILES) arm-gen.c
 C67_FILES = $(CORE_FILES) c67-gen.c tcccoff.c
+AVR_FILES = $(CORE_FILES) avr-gen.c
 
 ifdef CONFIG_WIN64
 PROGS+=tiny_impdef$(EXESUF) tiny_libmaker$(EXESUF)
@@ -142,6 +144,7 @@ tcc$(EXESUF): tcc.o $(LIBTCC)
 
 # Cross Tiny C Compilers
 %-tcc$(EXESUF): tcc.c
+	@echo $(DEFINES)
 	$(CC) -o $@ $< -DONE_SOURCE $(DEFINES) $(CPPFLAGS) $(CFLAGS) $(LIBS) $(LDFLAGS)
 
 # profiling version
@@ -163,6 +166,7 @@ $(ARM_FPA_CROSS): DEFINES = -DTCC_TARGET_ARM
 $(ARM_FPA_LD_CROSS)$(EXESUF): DEFINES = -DTCC_TARGET_ARM -DLDOUBLE_SIZE=12
 $(ARM_VFP_CROSS): DEFINES = -DTCC_TARGET_ARM -DTCC_ARM_VFP
 $(ARM_EABI_CROSS): DEFINES = -DTCC_TARGET_ARM -DTCC_ARM_EABI
+$(AVR_CROSS): DEFINES = -DTCC_TARGET_AVR
 
 $(I386_CROSS): $(I386_FILES)
 $(X64_CROSS): $(X86_64_FILES)
@@ -171,6 +175,7 @@ $(WIN64_CROSS): $(WIN64_FILES)
 $(WINCE_CROSS): $(WINCE_FILES)
 $(C67_CROSS): $(C67_FILES)
 $(ARM_FPA_CROSS) $(ARM_FPA_LD_CROSS) $(ARM_VFP_CROSS) $(ARM_EABI_CROSS): $(ARM_FILES)
+$(AVR_CROSS): $(AVR_FILES)
 
 # libtcc generation and test
 ifndef ONE_SOURCE
