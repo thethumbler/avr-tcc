@@ -56,3 +56,4 @@ tcc-doc.info
 conftest*
 tiny_libmaker
 *.dSYM
+tags

@@ -2068,9 +2068,18 @@ ST_FUNC int type_size(CType *type, int *a)
         *a = 8;
 #endif
         return 8;
+#ifdef TCC_TARGET_AVR
+    } else if (bt == VT_INT || bt == VT_ENUM) {
+        *a = 2;
+        return 2;
+    } else if (bt == VT_FLOAT) {
+        *a = 4;
+        return 4;
+#else
     } else if (bt == VT_INT || bt == VT_ENUM || bt == VT_FLOAT) {
         *a = 4;
         return 4;
+#endif
     } else if (bt == VT_SHORT) {
         *a = 2;
         return 2;
