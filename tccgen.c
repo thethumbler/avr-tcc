@@ -489,6 +489,7 @@ static void vdup(void)
 /* save r to the memory stack, and mark it as being free */
 ST_FUNC void save_reg(int r)
 {
+    printf("## save_reg(r=%d)\n", r);
     int l, saved, size, align;
     SValue *p, sv;
     CType *type;
@@ -577,6 +578,7 @@ ST_FUNC int get_reg_ex(int rc, int rc2)
 /* find a free register of class 'rc'. If none, save one register */
 ST_FUNC int get_reg(int rc)
 {
+    printf("## get_reg(rc=%x)\n", rc);
     int r;
     SValue *p;
 
@@ -687,6 +689,7 @@ static void gbound(void)
    register value (such as structures). */
 ST_FUNC int gv(int rc)
 {
+    printf("## gv(rc=%x)\n", rc);
     int r, bit_pos, bit_size, size, align, i;
 #ifndef TCC_TARGET_X86_64
 #ifdef TCC_TARGET_AVR
@@ -813,7 +816,7 @@ ST_FUNC int gv(int rc)
         if (r >= VT_CONST
          || (vtop->r & VT_LVAL)
          || !(reg_classes[r] & rc)
-#ifndef TCC_TARGET_X86_64 && !defined(TCC_TARGET_AVR)
+#if !defined(TCC_TARGET_X86_64) && !defined(TCC_TARGET_AVR)
          || ((vtop->type.t & VT_BTYPE) == VT_LLONG && !(reg_classes[vtop->r2] & rc2))
 #endif
             )
@@ -839,15 +842,15 @@ ST_FUNC int gv(int rc)
                        pointer here, so the safest (and less
                        efficient) is to save all the other registers
                        in the stack. XXX: totally inefficient. */
-                    save_regs(1);
+                    //save_regs(1);
                     /* load from memory */
                     load(r, vtop);
                     vdup();
                     vtop[-1].r = r; /* save register value */
                     /* increment pointer to get second word */
-                    vtop->type.t = VT_INT;
+                    vtop->type.t = VT_BYTE;
                     gaddrof();
-                    vpushi(4);
+                    vpushi(1);
                     gen_op('+');
                     vtop->r |= VT_LVAL;
                 } else {
@@ -2155,7 +2158,7 @@ ST_FUNC int type_size(CType *type, int *a)
     } else if (bt == VT_INT || bt == VT_ENUM) {
         *a = 2;
         return 2;
-    } else if (bt == VT_FLOAT) {
+    } else if (bt == VT_FLOAT || bt == VT_LONG) {
         *a = 4;
         return 4;
     } else if (bt == VT_SHORT) {
@@ -2460,6 +2463,7 @@ static void gen_assign_cast(CType *dt)
 /* store vtop in lvalue pushed on stack */
 ST_FUNC void vstore(void)
 {
+    printf("## vstore()\n");
     int sbt, dbt, ft, r, t, size, align, bit_size, bit_pos, rc, delayed_cast;
 
     ft = vtop[-1].type.t;
@@ -2598,6 +2602,21 @@ ST_FUNC void vstore(void)
             }
             store(r, vtop - 1);
 #ifndef TCC_TARGET_X86_64
+#ifdef TCC_TARGET_AVR
+            /* two word case handling : store second register at word + 1 */
+            if ((ft & VT_BTYPE) == VT_INT) {
+                vswap();
+                /* convert to int to increment easily */
+                vtop->type.t = VT_INT;
+                gaddrof();
+                vpushi(1);
+                gen_op('+');
+                vtop->r |= VT_LVAL;
+                vswap();
+                /* XXX: it works because r2 is spilled last ! */
+                store(vtop->r2, vtop - 1);
+            }
+#else
             /* two word case handling : store second register at word + 4 */
             if ((ft & VT_BTYPE) == VT_LLONG) {
                 vswap();
@@ -2611,6 +2630,7 @@ ST_FUNC void vstore(void)
                 /* XXX: it works because r2 is spilled last ! */
                 store(vtop->r2, vtop - 1);
             }
+#endif
 #endif
         }
         vswap();
@@ -3037,7 +3057,9 @@ static int parse_btype(CType *type, AttributeDef *ad)
                 t = (t & ~VT_BTYPE) | VT_LDOUBLE;
 #endif
             } else if ((t & VT_BTYPE) == VT_LONG) {
+#ifndef TCC_TARGET_AVR
                 t = (t & ~VT_BTYPE) | VT_LLONG;
+#endif
             } else {
                 u = VT_LONG;
                 goto basic_type1;
@@ -4612,9 +4634,19 @@ static void block(int *bsym, int *csym, int *case_sym, int *def_sym,
 #endif
             } else if (is_float(func_vt.t)) {
                 gv(rc_fret(func_vt.t));
+#ifdef TCC_TARGET_AVR
+            } else if ((func_vt.t & VT_BTYPE) == VT_BYTE) {
+                gv(RC_BRET);
+            } else if ((func_vt.t & VT_BTYPE) == VT_INT) {
+                gv(RC_IRET);
+            } else if ((func_vt.t & VT_BTYPE) == VT_LONG) {
+                gv(RC_LRET);
+            }
+#else
             } else {
                 gv(RC_IRET);
             }
+#endif
             vtop--; /* NOT vpop() because on x86 it would flush the fp stack */
         }
         skip(';');

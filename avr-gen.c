@@ -21,7 +21,7 @@
 #ifdef TARGET_DEFS_ONLY
 
 /* number of available registers */
-#define NB_REGS            8
+#define NB_REGS            12
 
 /* a register can belong to several classes. The classes must be
    sorted from more general to more precise (see gv2() code which does
@@ -164,10 +164,10 @@ ST_DATA const int reg_classes[NB_REGS] = {
     /* R23 */ RC_BYTE | RC_R23,
     /* R24 */ RC_BYTE | RC_R24,
     /* R25 */ RC_BYTE | RC_R25,
-    /* R26 */ //RC_INT,
-    /* R27 */ //RC_INT,
-    /* R28 */ //RC_INT,
-    /* R29 */ //RC_INT,
+    /* R26 */ RC_BYTE,
+    /* R27 */ RC_BYTE,
+    /* R28 */ RC_BYTE,
+    /* R29 */ RC_BYTE,
     /* R2  */ //RC_INT,
     /* R3  */ //RC_INT,
     /* R4  */ //RC_INT,
@@ -243,7 +243,7 @@ ST_FUNC void load(int r, SValue *sv)
         } else if ((ft & VT_TYPE) == (VT_SHORT | VT_UNSIGNED)) {
             //o(0xb70f);   /* movzwl */
         } else {
-            printf("ldd %s, Y%+d\n", reg_names[r], fc);
+            printf("ldd %s, Y%+d\n", reg_names[r], -fc);
             //o(0x8b);     /* movl */
         }
         //gen_modrm(r, fr, sv->sym, fc);
@@ -312,11 +312,9 @@ void store(int r, SValue * v)
         }
     }
     if (fr == VT_CONST || fr == VT_LOCAL || (v->r & VT_LVAL)) {
-        printf("std Y%+d, %s\n", fc, reg_names[r]);
-        //gen_modrm(r, v->r, v->sym, fc);
+        printf("std Y%+d, %s\n", -fc, reg_names[r]);
     } else if (fr != r) {
         printf("mov %s, %s\n", reg_names[fr], reg_names[r]);
-        //o(0xc0 + fr + r * 8); /* mov r, fr */
     }
 }
 
@@ -396,13 +394,25 @@ void gen_opi(int op)
     case TOK_ADDC1: /* add with carry */
         if ((vtop->r & (VT_VALMASK | VT_LVAL | VT_SYM)) == VT_CONST) {
             /* Immediate Operand */
+            int r2;
             vswap();
             r = gv(RC_INT);
+            r2 = vtop->r2;
             vswap();
-            c = vtop->c.i;
-            printf("addiw %s, %d\n", reg_names[r], c);
+            c = vtop->c.i & 0xFF;
+            printf("adiw %s, %d\n", reg_names[r], c);
+            c = (vtop->c.ui >> 8) & 0xFF;
+            if (c)
+                printf("adiw %s, %d\n", reg_names[r2], c);
         } else {
-
+            int r12, r21, r22;
+            gv2(RC_INT, RC_INT);
+            r = vtop[0].r;
+            r12 = vtop[0].r2;
+            r21 = vtop[-1].r;
+            r22 = vtop[-1].r2;
+            printf("add %s, %s\n", reg_names[r], reg_names[r21]);
+            printf("adc %s, %s\n", reg_names[r12], reg_names[r22]);
         }
 
         vtop--;
