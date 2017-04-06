@@ -191,12 +191,12 @@ ST_DATA const int reg_classes[NB_REGS] = {
 /******************************************************/
 
 /* output a symbol and patch all calls to it */
-void gsym_addr(int t, int a)
+ST_FUNC void gsym_addr(int t, int a)
 {
     printf("# gsym_addr(t=%d, a=%d)\n", t, a);
 }
 
-void gsym(int t)
+ST_FUNC void gsym(int t)
 {
     printf("# gsym(t=%d)\n", t);
 }
@@ -281,7 +281,7 @@ ST_FUNC void load(int r, SValue *sv)
 
 
 /* store register 'r' in lvalue 'v' */
-void store(int r, SValue * v)
+ST_FUNC void store(int r, SValue * v)
 {
     printf("# store(r=%d, v=%p)\n", r, v);
 
@@ -319,20 +319,20 @@ void store(int r, SValue * v)
 }
 
 /* 'is_jmp' is '1' if it is a jump */
-static void gcall_or_jmp(int is_jmp)
+ST_FUNC void gcall_or_jmp(int is_jmp)
 {
     printf("# gcall_or_jmp(is_jmp=%d)\n", is_jmp);
 }
 
 /* generate function call with address in (vtop->t, vtop->c) and free function
    context. Stack entry is popped */
-void gfunc_call(int nb_args)
+ST_FUNC void gfunc_call(int nb_args)
 {
     printf("# gfunc_call(nb_args=%d)\n", nb_args);
 }
 
 /* generate function prolog of type 't' */
-void gfunc_prolog(CType *func_type)
+ST_FUNC void gfunc_prolog(CType *func_type)
 {
     printf("//------------------------------------//\n");
     printf("# gfunc_prolog(func_type=%p)\n", func_type);
@@ -357,7 +357,7 @@ void gfunc_prolog(CType *func_type)
 }
 
 /* generate function epilog */
-void gfunc_epilog(void)
+ST_FUNC void gfunc_epilog(void)
 {
     printf("# gfun_epilog()\n");
     printf("ret\n");
@@ -365,25 +365,25 @@ void gfunc_epilog(void)
 }
 
 /* generate a jump to a label */
-int gjmp(int t)
+ST_FUNC int gjmp(int t)
 {
     printf("# gjmp(t=%d)\n", t);
 }
 
 /* generate a jump to a fixed address */
-void gjmp_addr(int a)
+ST_FUNC void gjmp_addr(int a)
 {
     printf("# gjmp_addr(a=%d)\n", a);
 }
 
 /* generate a test. set 'inv' to invert test. Stack entry is popped */
-int gtst(int inv, int t)
+ST_FUNC int gtst(int inv, int t)
 {
     printf("# gstat(inv=%d, t=%d)\n", inv, t);
 }
 
 /* generate an integer binary operation */
-void gen_opi(int op)
+ST_FUNC void gen_opi(int op)
 {
     printf("# gen_opi(op=%d)\n", op);
 
@@ -426,7 +426,7 @@ void gen_opi(int op)
 
 /* generate a floating point operation 'v = t1 op t2' instruction. The
    two operands are guaranted to have the same floating point type */
-void gen_opf(int op)
+ST_FUNC void gen_opf(int op)
 {
     printf("# gen_opf(op=%d)\n", op);
 }
@@ -434,25 +434,25 @@ void gen_opf(int op)
 
 /* convert integers to fp 't' type. Must handle 'int', 'unsigned int'
    and 'long long' cases. */
-void gen_cvt_itof(int t)
+ST_FUNC void gen_cvt_itof(int t)
 {
     printf("# gen_cvt_itof(t=%d)\n", t);
 }
 
 /* convert fp to int 't' type */
-void gen_cvt_ftoi(int t)
+ST_FUNC void gen_cvt_ftoi(int t)
 {
     printf("# gen_cvt_ftoi(t=%d)\n", t);
 }
 
 /* convert from one floating point type to another */
-void gen_cvt_ftof(int t)
+ST_FUNC void gen_cvt_ftof(int t)
 {
     printf("# gen_cvt_ftof(t=%d)\n", t);
 }
 
 /* computed goto support */
-void ggoto(void)
+ST_FUNC void ggoto(void)
 {
     printf("# ggoto()\n");
 }
