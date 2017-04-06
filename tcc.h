@@ -310,9 +310,20 @@ typedef union CValue {
 /* value on stack */
 typedef struct SValue {
     CType type;      /* type */
+#ifdef TCC_TARGET_AVR
+    unsigned short r;
+    unsigned short r2;
+    unsigned short r3;
+    unsigned short r4;
+    unsigned short r5;
+    unsigned short r6;
+    unsigned short r7;
+    unsigned short r8;
+#else
     unsigned short r;      /* register + flags */
     unsigned short r2;     /* second register, used for 'long long'
                               type. If not used, set to VT_CONST */
+#endif
     CValue c;              /* constant, if VT_CONST */
     struct Sym *sym;       /* symbol, if (VT_SYM | VT_CONST) */
 } SValue;

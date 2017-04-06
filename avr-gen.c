@@ -21,20 +21,31 @@
 #ifdef TARGET_DEFS_ONLY
 
 /* number of available registers */
-#define NB_REGS            7
+#define NB_REGS            8
 
 /* a register can belong to several classes. The classes must be
    sorted from more general to more precise (see gv2() code which does
    assumptions on it). */
-#define RC_INT     0x0001	/* generic integer register */
-#define RC_FLOAT   0x0002	/* generic float register */
-#define RC_R24     0x0004
-//#define RC_ST0     0x0008
-//#define RC_ECX     0x0010
-//#define RC_EDX     0x0020
-#define RC_IRET    RC_R24	/* function return: integer register */
-#define RC_LRET    RC_INT	/* function return: second integer register */
-#define RC_FRET    RC_INT	/* function return: float register */
+#define RC_BYTE    0x0001   /* generic byte register */
+#define RC_INT     0x0002	/* generic integer register */
+#define RC_FLOAT   0x0004	/* generic float register */
+#define RC_LONG    RC_FLOAT
+#define RC_LLONG   0x0008
+/* Return registers */
+#define RC_R24     0x0010
+#define RC_R25     0x0020
+#define RC_R23     0x0040
+#define RC_R22     0x0080
+#define RC_R21     0x0100
+#define RC_R20     0x0200
+#define RC_R19     0x0400
+#define RC_R18     0x0800
+
+#define RC_BRET    RC_R24	/* function return: byte register */
+#define RC_IRET    RC_R25	/* function return: second integer register */
+#define RC_LRET    RC_R22	/* function return: second integer register */
+#define RC_LLRET   RC_R18	/* function return: second integer register */
+#define RC_FRET    RC_LRET	/* function return: float register */
 
 /* pretty names for the registers */
 enum {
@@ -104,9 +115,10 @@ static char *reg_names[] =  {
 };
 
 /* return registers for function */
-#define REG_IRET TREG_R24	/* single word int return register */
-#define REG_LRET TREG_R25	/* second word return register (for long long) */
-#define REG_FRET TREG_R22	/* float return register */
+#define REG_BRET TREG_R24	/* single word int return register */
+#define REG_IRET TREG_R25	/* single word int return register */
+#define REG_LRET TREG_R26	/* second word return register (for long long) */
+#define REG_FRET TREG_R24	/* float return register */
 
 /* defined if function parameters must be evaluated in reverse order */
 #define INVERT_FUNC_PARAMS
@@ -144,14 +156,14 @@ static char *reg_names[] =  {
 #include "tcc.h"
 
 ST_DATA const int reg_classes[NB_REGS] = {
-    /* R18 */ RC_INT,
-    /* R19 */ RC_INT,
-    /* R20 */ RC_INT,
-    /* R21 */ RC_INT,
-    /* R22 */ RC_INT,
-    /* R23 */ RC_INT,
-    /* R24 */ RC_INT | RC_IRET,
-    /* R25 */ //RC_INT,
+    /* R18 */ RC_BYTE | RC_R18,
+    /* R19 */ RC_BYTE | RC_R19,
+    /* R20 */ RC_BYTE | RC_R20,
+    /* R21 */ RC_BYTE | RC_R21,
+    /* R22 */ RC_BYTE | RC_R22,
+    /* R23 */ RC_BYTE | RC_R23,
+    /* R24 */ RC_BYTE | RC_R24,
+    /* R25 */ RC_BYTE | RC_R25,
     /* R26 */ //RC_INT,
     /* R27 */ //RC_INT,
     /* R28 */ //RC_INT,

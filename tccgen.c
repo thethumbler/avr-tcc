@@ -689,7 +689,11 @@ ST_FUNC int gv(int rc)
 {
     int r, bit_pos, bit_size, size, align, i;
 #ifndef TCC_TARGET_X86_64
+#ifdef TCC_TARGET_AVR
+    int rc2, rc3, rc4, rc5, rc6, rc7, rc8;
+#else
     int rc2;
+#endif
 #endif
 
     /* NOTE: get_reg can modify vstack[] */
@@ -766,9 +770,41 @@ ST_FUNC int gv(int rc)
 
         r = vtop->r & VT_VALMASK;
 #ifndef TCC_TARGET_X86_64
+#ifdef TCC_TARGET_AVR
+        switch (rc) {
+        /* Return values */
+        case RC_LLRET:
+            rc8 = RC_R18;
+            rc7 = RC_R19;
+            rc6 = RC_R20;
+            rc5 = RC_R21;
+        case RC_LRET:   /* case RC_FRET */
+            rc4 = RC_R22;
+            rc3 = RC_R23;
+        case RC_IRET:
+            rc2 = RC_R25;
+        case RC_BRET:
+            rc = RC_R24;
+            break;
+        /* Generic registers */
+        case RC_LLONG:
+            rc8 = RC_BYTE;
+            rc7 = RC_BYTE;
+            rc6 = RC_BYTE;
+            rc5 = RC_BYTE;
+        case RC_LONG:
+            rc4 = RC_BYTE;
+            rc3 = RC_BYTE;
+        case RC_INT:
+            rc2 = RC_BYTE;
+        case RC_BYTE:
+            rc  = RC_BYTE;
+        }
+#else
         rc2 = RC_INT;
         if (rc == RC_IRET)
             rc2 = RC_LRET;
+#endif
 #endif
         /* need to reload if:
            - constant
@@ -777,13 +813,59 @@ ST_FUNC int gv(int rc)
         if (r >= VT_CONST
          || (vtop->r & VT_LVAL)
          || !(reg_classes[r] & rc)
-#ifndef TCC_TARGET_X86_64
+#ifndef TCC_TARGET_X86_64 && !defined(TCC_TARGET_AVR)
          || ((vtop->type.t & VT_BTYPE) == VT_LLONG && !(reg_classes[vtop->r2] & rc2))
 #endif
             )
         {
             r = get_reg(rc);
 #ifndef TCC_TARGET_X86_64
+#ifdef TCC_TARGET_AVR
+            if ((vtop->type.t & VT_BTYPE) == VT_INT) {
+                int r2;
+                unsigned int ui;
+                /* two register type load : expand to two words
+                   temporarily */
+                if ((vtop->r & (VT_VALMASK | VT_LVAL)) == VT_CONST) {
+                    /* load constant */
+                    ui = vtop->c.ui & 0xFF;
+                    vtop->c.ui = ui; /* first word */
+                    load(r, vtop);
+                    vtop->r = r; /* save register value */
+                    vpushi(ui >> 8); /* second word */
+                } else if (r >= VT_CONST || /* XXX: test to VT_CONST incorrect ? */
+                           (vtop->r & VT_LVAL)) {
+                    /* We do not want to modifier the long long
+                       pointer here, so the safest (and less
+                       efficient) is to save all the other registers
+                       in the stack. XXX: totally inefficient. */
+                    save_regs(1);
+                    /* load from memory */
+                    load(r, vtop);
+                    vdup();
+                    vtop[-1].r = r; /* save register value */
+                    /* increment pointer to get second word */
+                    vtop->type.t = VT_INT;
+                    gaddrof();
+                    vpushi(4);
+                    gen_op('+');
+                    vtop->r |= VT_LVAL;
+                } else {
+                    /* move registers */
+                    load(r, vtop);
+                    vdup();
+                    vtop[-1].r = r; /* save register value */
+                    vtop->r = vtop[-1].r2;
+                }
+                /* Allocate second register. Here we rely on the fact that
+                   get_reg() tries first to free r2 of an SValue. */
+                r2 = get_reg(rc2);
+                load(r2, vtop);
+                vpop();
+                /* write second register */
+                vtop->r2 = r2;
+            } else
+#else
             if ((vtop->type.t & VT_BTYPE) == VT_LLONG) {
                 int r2;
                 unsigned long long ll;
@@ -828,6 +910,7 @@ ST_FUNC int gv(int rc)
                 /* write second register */
                 vtop->r2 = r2;
             } else
+#endif
 #endif
             if ((vtop->r & VT_LVAL) && !is_float(vtop->type.t)) {
                 int t1, t;
@@ -2075,14 +2158,17 @@ ST_FUNC int type_size(CType *type, int *a)
     } else if (bt == VT_FLOAT) {
         *a = 4;
         return 4;
+    } else if (bt == VT_SHORT) {
+        *a = 1;
+        return 1;
 #else
     } else if (bt == VT_INT || bt == VT_ENUM || bt == VT_FLOAT) {
         *a = 4;
         return 4;
-#endif
     } else if (bt == VT_SHORT) {
         *a = 2;
         return 2;
+#endif
     } else {
         /* char, void, function, _Bool */
         *a = 1;
@@ -3906,9 +3992,17 @@ ST_FUNC void unary(void)
                 if (is_float(ret.type.t)) {
                     ret.r = reg_fret(ret.type.t);
                 } else {
+#ifdef TCC_TARGET_AVR
+                    switch (ret.type.t & VT_BTYPE) {
+                    case VT_INT: ret.r2 = REG_IRET;
+                    case VT_BYTE:
+                    default: ret.r = REG_BRET;
+                    }
+#else
                     if ((ret.type.t & VT_BTYPE) == VT_LLONG)
                         ret.r2 = REG_LRET;
                     ret.r = REG_IRET;
+#endif
                 }
                 ret.c.i = 0;
             }
