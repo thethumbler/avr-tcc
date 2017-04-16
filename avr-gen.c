@@ -190,6 +190,26 @@ ST_DATA const int reg_classes[NB_REGS] = {
 
 /******************************************************/
 
+void g(int c)
+{
+    int ind1;
+    ind1 = ind + 1;
+    if (ind1 > cur_text_section->data_allocated)
+        section_realloc(cur_text_section, ind1);
+    cur_text_section->data[ind] = c;
+    ind = ind1;
+}
+
+void o(unsigned int c)
+{
+    while (c) {
+        g(c);
+        c = c >> 8;
+    }
+}
+
+/*****************************************************/
+
 /* output a symbol and patch all calls to it */
 ST_FUNC void gsym_addr(int t, int a)
 {
@@ -243,15 +263,12 @@ ST_FUNC void load(int r, SValue *sv)
         } else if ((ft & VT_TYPE) == (VT_SHORT | VT_UNSIGNED)) {
             //o(0xb70f);   /* movzwl */
         } else {
-            printf("ldd %s, Y%+d\n", reg_names[r], -fc);
-            //o(0x8b);     /* movl */
+            printf("ldd %s, Y%+d\n", reg_names[r], fc);
         }
         //gen_modrm(r, fr, sv->sym, fc);
     } else {
         if (v == VT_CONST) {
             printf("ldi %s, %d\n", reg_names[r], fc);
-            //o(0xb8 + r); /* mov $xx, r */
-            //gen_addr32(fr, sv->sym, fc);
         } else if (v == VT_LOCAL) {
             if (fc) {
                 //o(0x8d); /* lea xxx(%ebp), r */
@@ -273,8 +290,6 @@ ST_FUNC void load(int r, SValue *sv)
             //oad(0xb8 + r, t ^ 1); /* mov $0, r */
         } else if (v != r) {
             printf("mov %s, %s\n", reg_names[r], reg_names[v]);
-            //o(0x89);
-            //o(0xc0 + r + v * 8); /* mov v, r */
         }
     }
 }
@@ -331,6 +346,27 @@ ST_FUNC void gfunc_call(int nb_args)
     printf("# gfunc_call(nb_args=%d)\n", nb_args);
 }
 
+static int arg_regs[] = {
+    TREG_R25,
+    TREG_R24,
+    TREG_R23,
+    TREG_R22,
+    TREG_R21,
+    TREG_R20,
+    TREG_R19,
+    TREG_R18,
+    TREG_R17,
+    TREG_R16,
+    TREG_R15,
+    TREG_R14,
+    TREG_R13,
+    TREG_R12,
+    TREG_R11,
+    TREG_R10,
+    TREG_R9,
+    TREG_R8,
+};
+
 /* generate function prolog of type 't' */
 ST_FUNC void gfunc_prolog(CType *func_type)
 {
@@ -343,14 +379,34 @@ ST_FUNC void gfunc_prolog(CType *func_type)
     sym = func_type->ref;
     func_vt = sym->type;
 
-    addr = 0;
+    int reg_index = 0;
+
+    addr = 1;
     int i = 0;
+
     while (sym = sym->next) {
         CType *type;
         type = &sym->type;
         size = type_size(type, &align);
-        //addr = (addr + align - 1) / align * align;
+
+        if (reg_index < 10) {   /* Arguments passed by registers */
+            switch (size) {
+            case 8:
+                tcc_error("64-bit argument size not supported");
+            case 4:
+                tcc_error("32-bit argument size not supported");
+            case 2: /* Choose the odd valued register */
+                printf("std Y%+d, %s\n", reg_index + 2, reg_names[arg_regs[reg_index]]);
+            case 1: /* Choose the even-valued register */
+                printf("std Y%+d, %s\n", reg_index + 1, reg_names[arg_regs[reg_index + 1]]);
+            }
+            reg_index += size;
+        } else {
+            tcc_error("arguments passed by stack is not implemented");
+        }
+
         sym_push(sym->v & ~SYM_FIELD, type, VT_LOCAL | lvalue_type(type->t), addr);
+
         printf("# gfun_prolog: arg[%d] at stack ptr %i [%d bytes]\n", i++, addr, size);
         addr += size;
     }
@@ -387,11 +443,13 @@ ST_FUNC void gen_opi(int op)
 {
     printf("# gen_opi(op=%d)\n", op);
 
-    int r, c;
+    int r, c, _op;
 
     switch (op) {
     case '+':
     case TOK_ADDC1: /* add with carry */
+        _op = 0; /* Add */
+    gen_op:
         if ((vtop->r & (VT_VALMASK | VT_LVAL | VT_SYM)) == VT_CONST) {
             /* Immediate Operand */
             int r2;
@@ -411,8 +469,8 @@ ST_FUNC void gen_opi(int op)
             r12 = vtop[0].r2;
             r21 = vtop[-1].r;
             r22 = vtop[-1].r2;
-            printf("add %s, %s\n", reg_names[r], reg_names[r21]);
-            printf("adc %s, %s\n", reg_names[r12], reg_names[r22]);
+            printf("%s %s, %s\n", _op? "sub" : "add", reg_names[r], reg_names[r21]);
+            printf("%s %s, %s\n", _op? "sbc" : "adc", reg_names[r12], reg_names[r22]);
         }
 
         vtop--;
@@ -421,6 +479,10 @@ ST_FUNC void gen_opi(int op)
             vtop->c.i = op;
         }
         break;
+    case '-':
+    case TOK_SUBC1: /* sub with carry generation */
+        _op = 1;
+        goto gen_op;
     }
 }
 
