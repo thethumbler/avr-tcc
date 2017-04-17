@@ -370,7 +370,19 @@ ST_FUNC void store(int r, SValue * v)
             //o(0x89);
         }
     }
-    if (fr == VT_CONST || fr == VT_LOCAL || (v->r & VT_LVAL)) {
+
+    if (fr == VT_CONST) {   /* Constant memory reference */
+        AVR_DEBUG("ldi r30, %x\n", fc & 0xFF);
+        o(0xE000 | (((fc >> 4) & 0xF) << 8) | ((30 - 0x10) << 4) | (fc & 0xF));
+
+        fc >>= 8;
+        AVR_DEBUG("ldi r31, %x\n", fc & 0xFF);
+        o(0xE000 | (((fc >> 4) & 0xF) << 8) | ((31 - 0x10) << 4) | (fc & 0xF));
+
+        AVR_DEBUG("st Z, %s\n", reg_names[r]);
+        r = reg_idx[r];
+        o4(0x8, 0x2 | ((r >> 4) & 1), r & 0xF, 0);
+    } else if (fr == VT_LOCAL || (v->r & VT_LVAL)) {
         fc = -fc;
         AVR_DEBUG("std Y%+d, %s\n", fc, reg_names[r]);
         r = reg_idx[r];
@@ -432,7 +444,7 @@ ST_FUNC void gfunc_prolog(CType *func_type)
     int reg_index = 0;
 
     addr = 1;
-    int i = 0;
+    int i = 0, r, off;
 
     while (sym = sym->next) {
         CType *type;
@@ -447,8 +459,14 @@ ST_FUNC void gfunc_prolog(CType *func_type)
                 tcc_error("32-bit argument size not supported");
             case 2: /* Choose the odd valued register */
                 AVR_DEBUG("std Y%+d, %s\n", reg_index + 2, reg_names[arg_regs[reg_index]]);
+                r = reg_idx[arg_regs[reg_index]];
+                off = reg_index + 2;
+                o4(0x8 | ((off >> 4) & 0x2), 0x2 | ((off >> 3) & 0x3) | ((r >> 4) & 1), (r & 0xF), 0x8 | off & 0x7);
             case 1: /* Choose the even-valued register */
                 AVR_DEBUG("std Y%+d, %s\n", reg_index + 1, reg_names[arg_regs[reg_index + 1]]);
+                r = reg_idx[arg_regs[reg_index + 1]];
+                off = reg_index + 1;
+                o4(0x8 | ((off >> 4) & 0x2), 0x2 | ((off >> 3) & 0x3) | ((r >> 4) & 1), (r & 0xF), 0x8 | off & 0x7);
             }
             reg_index += size;
         } else {
