@@ -81,6 +81,39 @@ enum {
     TREG_R31,
 };
 
+static int reg_idx[] =  {
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    30,
+    31,
+};
+
 static char *reg_names[] =  {
     "r18",
     "r19",
@@ -208,6 +241,12 @@ void o(unsigned int c)
     }
 }
 
+void o4(unsigned char c1, unsigned char c2, unsigned char c3, unsigned char c4)
+{
+    g((c3 << 4) | c4);
+    g((c1 << 4) | c2);
+}
+
 /*****************************************************/
 
 /* output a symbol and patch all calls to it */
@@ -269,6 +308,7 @@ ST_FUNC void load(int r, SValue *sv)
     } else {
         if (v == VT_CONST) {
             printf("ldi %s, %d\n", reg_names[r], fc);
+            o(0xE000 | (((fc >> 4) & 0xF) << 8) | ((reg_idx[r] - 0x10) << 4) | (fc & 0xF));
         } else if (v == VT_LOCAL) {
             if (fc) {
                 //o(0x8d); /* lea xxx(%ebp), r */
@@ -290,6 +330,9 @@ ST_FUNC void load(int r, SValue *sv)
             //oad(0xb8 + r, t ^ 1); /* mov $0, r */
         } else if (v != r) {
             printf("mov %s, %s\n", reg_names[r], reg_names[v]);
+            r = reg_idx[r];
+            v = reg_idx[v];
+            o4(0x2, 0xC | ((r >> 3) & 0x2) | ((v >> 4) & 1), r & 0xF, v & 0xF);
         }
     }
 }
@@ -327,9 +370,15 @@ ST_FUNC void store(int r, SValue * v)
         }
     }
     if (fr == VT_CONST || fr == VT_LOCAL || (v->r & VT_LVAL)) {
-        printf("std Y%+d, %s\n", -fc, reg_names[r]);
+        fc = -fc;
+        printf("std Y%+d, %s\n", fc, reg_names[r]);
+        r = reg_idx[r];
+        o(((0x8 | ((fc >> 5) & 1)) << 12) | ((0x2 | ((fc >> 3) & 0x3) | ((r >> 4) & 1)) << 8) | ((r & 0xF) << 4) | 0x8 | fc & 0x7);
     } else if (fr != r) {
         printf("mov %s, %s\n", reg_names[fr], reg_names[r]);
+        fr = reg_idx[fr];
+        r = reg_idx[r];
+        o4(0x2, 0xC | ((fr >> 3) & 0x2) | ((r >> 4) & 1), fr & 0xF, r & 0xF);
     }
 }
 
@@ -417,6 +466,7 @@ ST_FUNC void gfunc_epilog(void)
 {
     printf("# gfun_epilog()\n");
     printf("ret\n");
+    o(0x9508);
     printf("//------------------------------------//\n");
 }
 
