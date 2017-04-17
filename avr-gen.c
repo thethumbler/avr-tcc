@@ -18,6 +18,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#define AVR_DEBUG(...) printf(__VA_ARGS__)
+
 #ifdef TARGET_DEFS_ONLY
 
 /* number of available registers */
@@ -252,18 +254,18 @@ void o4(unsigned char c1, unsigned char c2, unsigned char c3, unsigned char c4)
 /* output a symbol and patch all calls to it */
 ST_FUNC void gsym_addr(int t, int a)
 {
-    printf("# gsym_addr(t=%d, a=%d)\n", t, a);
+    AVR_DEBUG("# gsym_addr(t=%d, a=%d)\n", t, a);
 }
 
 ST_FUNC void gsym(int t)
 {
-    printf("# gsym(t=%d)\n", t);
+    AVR_DEBUG("# gsym(t=%d)\n", t);
 }
 
 /* load 'r' from value 'sv' */
 ST_FUNC void load(int r, SValue *sv)
 {
-    printf("# load(r=%d, sv=%p)\n", r, sv);
+    AVR_DEBUG("# load(r=%d, sv=%p)\n", r, sv);
 
     int v, t, ft, fc, fr;
     SValue v1;
@@ -273,7 +275,6 @@ ST_FUNC void load(int r, SValue *sv)
     fc = sv->c.ul;
 
     v = fr & VT_VALMASK;
-    //printf("fr=%x, ft=%d, fc=%d, v=%x\n", fr, ft, fc, v);
     if (fr & VT_LVAL) {
         if (v == VT_LLOCAL) {
             v1.type.t = VT_INT;
@@ -302,12 +303,12 @@ ST_FUNC void load(int r, SValue *sv)
         } else if ((ft & VT_TYPE) == (VT_SHORT | VT_UNSIGNED)) {
             //o(0xb70f);   /* movzwl */
         } else {
-            printf("ldd %s, Y%+d\n", reg_names[r], fc);
+            AVR_DEBUG("ldd %s, Y%+d\n", reg_names[r], fc);
         }
         //gen_modrm(r, fr, sv->sym, fc);
     } else {
         if (v == VT_CONST) {
-            printf("ldi %s, %d\n", reg_names[r], fc);
+            AVR_DEBUG("ldi %s, %d\n", reg_names[r], fc);
             o(0xE000 | (((fc >> 4) & 0xF) << 8) | ((reg_idx[r] - 0x10) << 4) | (fc & 0xF));
         } else if (v == VT_LOCAL) {
             if (fc) {
@@ -329,7 +330,7 @@ ST_FUNC void load(int r, SValue *sv)
             //gsym(fc);
             //oad(0xb8 + r, t ^ 1); /* mov $0, r */
         } else if (v != r) {
-            printf("mov %s, %s\n", reg_names[r], reg_names[v]);
+            AVR_DEBUG("mov %s, %s\n", reg_names[r], reg_names[v]);
             r = reg_idx[r];
             v = reg_idx[v];
             o4(0x2, 0xC | ((r >> 3) & 0x2) | ((v >> 4) & 1), r & 0xF, v & 0xF);
@@ -341,7 +342,7 @@ ST_FUNC void load(int r, SValue *sv)
 /* store register 'r' in lvalue 'v' */
 ST_FUNC void store(int r, SValue * v)
 {
-    printf("# store(r=%d, v=%p)\n", r, v);
+    AVR_DEBUG("# store(r=%d, v=%p)\n", r, v);
 
     int fr, bt, ft, fc;
 
@@ -371,11 +372,11 @@ ST_FUNC void store(int r, SValue * v)
     }
     if (fr == VT_CONST || fr == VT_LOCAL || (v->r & VT_LVAL)) {
         fc = -fc;
-        printf("std Y%+d, %s\n", fc, reg_names[r]);
+        AVR_DEBUG("std Y%+d, %s\n", fc, reg_names[r]);
         r = reg_idx[r];
         o(((0x8 | ((fc >> 5) & 1)) << 12) | ((0x2 | ((fc >> 3) & 0x3) | ((r >> 4) & 1)) << 8) | ((r & 0xF) << 4) | 0x8 | fc & 0x7);
     } else if (fr != r) {
-        printf("mov %s, %s\n", reg_names[fr], reg_names[r]);
+        AVR_DEBUG("mov %s, %s\n", reg_names[fr], reg_names[r]);
         fr = reg_idx[fr];
         r = reg_idx[r];
         o4(0x2, 0xC | ((fr >> 3) & 0x2) | ((r >> 4) & 1), fr & 0xF, r & 0xF);
@@ -385,14 +386,14 @@ ST_FUNC void store(int r, SValue * v)
 /* 'is_jmp' is '1' if it is a jump */
 ST_FUNC void gcall_or_jmp(int is_jmp)
 {
-    printf("# gcall_or_jmp(is_jmp=%d)\n", is_jmp);
+    AVR_DEBUG("# gcall_or_jmp(is_jmp=%d)\n", is_jmp);
 }
 
 /* generate function call with address in (vtop->t, vtop->c) and free function
    context. Stack entry is popped */
 ST_FUNC void gfunc_call(int nb_args)
 {
-    printf("# gfunc_call(nb_args=%d)\n", nb_args);
+    AVR_DEBUG("# gfunc_call(nb_args=%d)\n", nb_args);
 }
 
 static int arg_regs[] = {
@@ -419,8 +420,8 @@ static int arg_regs[] = {
 /* generate function prolog of type 't' */
 ST_FUNC void gfunc_prolog(CType *func_type)
 {
-    printf("//------------------------------------//\n");
-    printf("# gfunc_prolog(func_type=%p)\n", func_type);
+    AVR_DEBUG("//------------------------------------//\n");
+    AVR_DEBUG("# gfunc_prolog(func_type=%p)\n", func_type);
 
     Sym *sym;
     int n, addr, size, align;
@@ -445,9 +446,9 @@ ST_FUNC void gfunc_prolog(CType *func_type)
             case 4:
                 tcc_error("32-bit argument size not supported");
             case 2: /* Choose the odd valued register */
-                printf("std Y%+d, %s\n", reg_index + 2, reg_names[arg_regs[reg_index]]);
+                AVR_DEBUG("std Y%+d, %s\n", reg_index + 2, reg_names[arg_regs[reg_index]]);
             case 1: /* Choose the even-valued register */
-                printf("std Y%+d, %s\n", reg_index + 1, reg_names[arg_regs[reg_index + 1]]);
+                AVR_DEBUG("std Y%+d, %s\n", reg_index + 1, reg_names[arg_regs[reg_index + 1]]);
             }
             reg_index += size;
         } else {
@@ -456,7 +457,7 @@ ST_FUNC void gfunc_prolog(CType *func_type)
 
         sym_push(sym->v & ~SYM_FIELD, type, VT_LOCAL | lvalue_type(type->t), addr);
 
-        printf("# gfun_prolog: arg[%d] at stack ptr %i [%d bytes]\n", i++, addr, size);
+        AVR_DEBUG("# gfun_prolog: arg[%d] at stack ptr %i [%d bytes]\n", i++, addr, size);
         addr += size;
     }
 }
@@ -464,34 +465,34 @@ ST_FUNC void gfunc_prolog(CType *func_type)
 /* generate function epilog */
 ST_FUNC void gfunc_epilog(void)
 {
-    printf("# gfun_epilog()\n");
-    printf("ret\n");
+    AVR_DEBUG("# gfun_epilog()\n");
+    AVR_DEBUG("ret\n");
     o(0x9508);
-    printf("//------------------------------------//\n");
+    AVR_DEBUG("//------------------------------------//\n");
 }
 
 /* generate a jump to a label */
 ST_FUNC int gjmp(int t)
 {
-    printf("# gjmp(t=%d)\n", t);
+    AVR_DEBUG("# gjmp(t=%d)\n", t);
 }
 
 /* generate a jump to a fixed address */
 ST_FUNC void gjmp_addr(int a)
 {
-    printf("# gjmp_addr(a=%d)\n", a);
+    AVR_DEBUG("# gjmp_addr(a=%d)\n", a);
 }
 
 /* generate a test. set 'inv' to invert test. Stack entry is popped */
 ST_FUNC int gtst(int inv, int t)
 {
-    printf("# gstat(inv=%d, t=%d)\n", inv, t);
+    AVR_DEBUG("# gstat(inv=%d, t=%d)\n", inv, t);
 }
 
 /* generate an integer binary operation */
 ST_FUNC void gen_opi(int op)
 {
-    printf("# gen_opi(op=%d)\n", op);
+    AVR_DEBUG("# gen_opi(op=%d)\n", op);
 
     int r, c, _op;
 
@@ -508,10 +509,10 @@ ST_FUNC void gen_opi(int op)
             r2 = vtop->r2;
             vswap();
             c = vtop->c.i & 0xFF;
-            printf("adiw %s, %d\n", reg_names[r], c);
+            AVR_DEBUG("adiw %s, %d\n", reg_names[r], c);
             c = (vtop->c.ui >> 8) & 0xFF;
             if (c)
-                printf("adiw %s, %d\n", reg_names[r2], c);
+                AVR_DEBUG("adiw %s, %d\n", reg_names[r2], c);
         } else {
             int r12, r21, r22;
             gv2(RC_INT, RC_INT);
@@ -519,8 +520,8 @@ ST_FUNC void gen_opi(int op)
             r12 = vtop[0].r2;
             r21 = vtop[-1].r;
             r22 = vtop[-1].r2;
-            printf("%s %s, %s\n", _op? "sub" : "add", reg_names[r], reg_names[r21]);
-            printf("%s %s, %s\n", _op? "sbc" : "adc", reg_names[r12], reg_names[r22]);
+            AVR_DEBUG("%s %s, %s\n", _op? "sub" : "add", reg_names[r], reg_names[r21]);
+            AVR_DEBUG("%s %s, %s\n", _op? "sbc" : "adc", reg_names[r12], reg_names[r22]);
         }
 
         vtop--;
@@ -540,7 +541,7 @@ ST_FUNC void gen_opi(int op)
    two operands are guaranted to have the same floating point type */
 ST_FUNC void gen_opf(int op)
 {
-    printf("# gen_opf(op=%d)\n", op);
+    AVR_DEBUG("# gen_opf(op=%d)\n", op);
 }
 
 
@@ -548,25 +549,25 @@ ST_FUNC void gen_opf(int op)
    and 'long long' cases. */
 ST_FUNC void gen_cvt_itof(int t)
 {
-    printf("# gen_cvt_itof(t=%d)\n", t);
+    AVR_DEBUG("# gen_cvt_itof(t=%d)\n", t);
 }
 
 /* convert fp to int 't' type */
 ST_FUNC void gen_cvt_ftoi(int t)
 {
-    printf("# gen_cvt_ftoi(t=%d)\n", t);
+    AVR_DEBUG("# gen_cvt_ftoi(t=%d)\n", t);
 }
 
 /* convert from one floating point type to another */
 ST_FUNC void gen_cvt_ftof(int t)
 {
-    printf("# gen_cvt_ftof(t=%d)\n", t);
+    AVR_DEBUG("# gen_cvt_ftof(t=%d)\n", t);
 }
 
 /* computed goto support */
 ST_FUNC void ggoto(void)
 {
-    printf("# ggoto()\n");
+    AVR_DEBUG("# ggoto()\n");
 }
 
 /* end of AVR code generator */
