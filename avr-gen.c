@@ -18,12 +18,12 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#define AVR_DEBUG(...) printf(__VA_ARGS__)
+#define AVR_DEBUG(...) fprintf(stderr, __VA_ARGS__)
 
 #ifdef TARGET_DEFS_ONLY
 
 /* number of available registers */
-#define NB_REGS            12
+#define NB_REGS            32
 
 /* a register can belong to several classes. The classes must be
    sorted from more general to more precise (see gv2() code which does
@@ -42,6 +42,8 @@
 #define RC_R20     0x0200
 #define RC_R19     0x0400
 #define RC_R18     0x0800
+
+#define RC_ADIW    0x0010   /* can be used in adiw instruction */
 
 #define RC_BRET    RC_R24	/* function return: byte register */
 #define RC_IRET    RC_R25	/* function return: second integer register */
@@ -150,7 +152,7 @@ static char *reg_names[] =  {
 };
 
 /* return registers for function */
-#define REG_BRET TREG_R24	/* single word int return register */
+#define REG_BRET TREG_R24	/* single word byte return register */
 #define REG_IRET TREG_R25	/* single word int return register */
 #define REG_LRET TREG_R26	/* second word return register (for long long) */
 #define REG_FRET TREG_R24	/* float return register */
@@ -177,8 +179,8 @@ static char *reg_names[] =  {
 #define EM_TCC_TARGET EM_AVR
 
 /* relocation type for 32 bit data relocation */
-#define R_DATA_32   R_C60_32
-#define R_DATA_PTR  R_C60_32
+#define R_DATA_32   R_AVR_32
+#define R_DATA_PTR  R_AVR_32
 #define R_JMP_SLOT  R_C60_JMP_SLOT
 #define R_COPY      R_C60_COPY
 
@@ -203,24 +205,24 @@ ST_DATA const int reg_classes[NB_REGS] = {
     /* R27 */ RC_BYTE,
     /* R28 */ RC_BYTE,
     /* R29 */ RC_BYTE,
-    /* R2  */ //RC_INT,
-    /* R3  */ //RC_INT,
-    /* R4  */ //RC_INT,
-    /* R5  */ //RC_INT,
-    /* R6  */ //RC_INT,
-    /* R7  */ //RC_INT,
-    /* R8  */ //RC_INT,
-    /* R9  */ //RC_INT,
-    /* R10 */ //RC_INT,
-    /* R11 */ //RC_INT,
-    /* R12 */ //RC_INT,
-    /* R13 */ //RC_INT,
-    /* R14 */ //RC_INT,
-    /* R15 */ //RC_INT,
-    /* R16 */ //RC_INT,
-    /* R17 */ //RC_INT,
-    /* R30 */ //RC_INT,
-    /* R31 */ //RC_INT,
+    /* R2  */ RC_BYTE,
+    /* R3  */ RC_BYTE,
+    /* R4  */ RC_BYTE,
+    /* R5  */ RC_BYTE,
+    /* R6  */ RC_BYTE,
+    /* R7  */ RC_BYTE,
+    /* R8  */ RC_BYTE,
+    /* R9  */ RC_BYTE,
+    /* R10 */ RC_BYTE,
+    /* R11 */ RC_BYTE,
+    /* R12 */ RC_BYTE,
+    /* R13 */ RC_BYTE,
+    /* R14 */ RC_BYTE,
+    /* R15 */ RC_BYTE,
+    /* R16 */ RC_BYTE,
+    /* R17 */ RC_BYTE,
+    /* R30 */ RC_BYTE,
+    /* R31 */ RC_BYTE,
 };
 
 /******************************************************/
@@ -255,11 +257,19 @@ void o4(unsigned char c1, unsigned char c2, unsigned char c3, unsigned char c4)
 ST_FUNC void gsym_addr(int t, int a)
 {
     AVR_DEBUG("# gsym_addr(t=%d, a=%d)\n", t, a);
+    int n, *ptr;
+    while (t) {
+        ptr = (int *)(cur_text_section->data + t);
+        n = *ptr; /* next value */
+        *ptr = a - t - 4;
+        t = n;
+    }
 }
 
 ST_FUNC void gsym(int t)
 {
     AVR_DEBUG("# gsym(t=%d)\n", t);
+    gsym_addr(t, ind);
 }
 
 /* load 'r' from value 'sv' */
@@ -309,7 +319,7 @@ ST_FUNC void load(int r, SValue *sv)
     } else {
         if (v == VT_CONST) {
             AVR_DEBUG("ldi %s, %d\n", reg_names[r], fc);
-            o(0xE000 | (((fc >> 4) & 0xF) << 8) | ((reg_idx[r] - 0x10) << 4) | (fc & 0xF));
+            o4(0xE, (fc >> 4) & 0xF, reg_idx[r] - 0x10, fc & 0xF);
         } else if (v == VT_LOCAL) {
             if (fc) {
                 //o(0x8d); /* lea xxx(%ebp), r */
@@ -350,6 +360,7 @@ ST_FUNC void store(int r, SValue * v)
     fc = v->c.ul;
     fr = v->r & VT_VALMASK;
     bt = ft & VT_BTYPE;
+    printf("ft = %x, fc = %x, fr = %x, bt = %x\n", ft, fc, v->r, bt);
 
     if (bt == VT_FLOAT) {
         //o(0xd9); /* fsts */
@@ -382,7 +393,27 @@ ST_FUNC void store(int r, SValue * v)
         AVR_DEBUG("st Z, %s\n", reg_names[r]);
         r = reg_idx[r];
         o4(0x8, 0x2 | ((r >> 4) & 1), r & 0xF, 0);
-    } else if (fr == VT_LOCAL || (v->r & VT_LVAL)) {
+    } else if (v->r & VT_LVAL) {
+        if (v->r & VT_LVAL_BYTE) {
+            fc = -fc;
+
+            AVR_DEBUG("ldd r31, Y%+d\n", fc);
+            o4(0x8 | ((fc >> 4) & 2), ((fc >> 3) & 0xC) | ((31 >> 4) & 1), 31 & 0xF, 0x8 | (fc & 0x7));
+
+            --fc;
+            AVR_DEBUG("ldd r30, Y%+d\n", fc);
+            o4(0x8 | ((fc >> 4) & 2), ((fc >> 3) & 0xC) | ((30 >> 4) & 1), 30 & 0xF, 0x8 | (fc & 0x7));
+
+            AVR_DEBUG("st Z, %s\n", reg_names[r]);
+            r = reg_idx[r];
+            o4(0x8, 0x2 | ((r >> 4) & 1), r & 0xF, 0);
+        } else {
+            fc = -fc;
+            AVR_DEBUG("std Y%+d, %s\n", fc, reg_names[r]);
+            r = reg_idx[r];
+            o4(0x8 | ((fc >> 5) & 1), 0x2 | ((fc >> 3) & 0x3) | ((r >> 4) & 1), r & 0xF, 0x8 | fc & 0x7);
+        }
+    } else if (fr == VT_LOCAL) {    /* Offset on stack */
         fc = -fc;
         AVR_DEBUG("std Y%+d, %s\n", fc, reg_names[r]);
         r = reg_idx[r];
@@ -454,9 +485,9 @@ ST_FUNC void gfunc_prolog(CType *func_type)
         if (reg_index < 10) {   /* Arguments passed by registers */
             switch (size) {
             case 8:
-                tcc_error("64-bit argument size not supported");
+                tcc_error("64-bit argument size is not yet supported");
             case 4:
-                tcc_error("32-bit argument size not supported");
+                tcc_error("32-bit argument size is not yet supported");
             case 2: /* Choose the odd valued register */
                 AVR_DEBUG("std Y%+d, %s\n", reg_index + 2, reg_names[arg_regs[reg_index]]);
                 r = reg_idx[arg_regs[reg_index]];
@@ -470,7 +501,7 @@ ST_FUNC void gfunc_prolog(CType *func_type)
             }
             reg_index += size;
         } else {
-            tcc_error("arguments passed by stack is not implemented");
+            tcc_error("arguments passed by stack is not yet supported");
         }
 
         sym_push(sym->v & ~SYM_FIELD, type, VT_LOCAL | lvalue_type(type->t), addr);
@@ -512,7 +543,8 @@ ST_FUNC void gen_opi(int op)
 {
     AVR_DEBUG("# gen_opi(op=%d)\n", op);
 
-    int r, c, _op;
+    int r, _op;
+    unsigned c, _c;
 
     switch (op) {
     case '+':
@@ -526,11 +558,26 @@ ST_FUNC void gen_opi(int op)
             r = gv(RC_INT);
             r2 = vtop->r2;
             vswap();
-            c = vtop->c.i & 0xFF;
-            AVR_DEBUG("adiw %s, %d\n", reg_names[r], c);
-            c = (vtop->c.ui >> 8) & 0xFF;
-            if (c)
-                AVR_DEBUG("adiw %s, %d\n", reg_names[r2], c);
+            c = vtop->c.ui;
+
+            if (reg_idx[r] >= 24 && 
+                reg_idx[r2] == reg_idx[r] + 1 &&
+                c >> 6 < 2) { /* Could be done in utmost 2 ADIW operations */
+                while (c & 0x3F) {
+                    _c = c & 0x3F;
+                    AVR_DEBUG("adiw %s, %d\n", reg_names[r], c & 0x3F);
+                    c >>= 6;
+                }
+            } else if (reg_idx[r] >= 16) {   /* Can use subi and sbci */
+                c = -c;
+                AVR_DEBUG("subi %s, %d\n", reg_names[r], c & 0xFF);
+                o4(0x5, (c >> 4) & 0xF, reg_idx[r], c & 0xF);
+                c >>= 16;
+                AVR_DEBUG("sbci %s, %d\n", reg_names[r2], (c >> 8) & 0xFF);
+                o4(0x4, (c >> 4) & 0xF, reg_idx[r2], c & 0xF);
+            } else {
+                tcc_error("XXX: Operation on register unsupported");
+            }
         } else {
             int r12, r21, r22;
             gv2(RC_INT, RC_INT);
