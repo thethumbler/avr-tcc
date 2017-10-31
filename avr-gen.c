@@ -430,15 +430,38 @@ ST_FUNC void store(int r, SValue * v)
 ST_FUNC void gcall_or_jmp(int is_jmp)
 {
     AVR_DEBUG("# gcall_or_jmp(is_jmp=%d)\n", is_jmp);
+    int r;
+    if ((vtop->r & (VT_VALMASK | VT_LVAL)) == VT_CONST) {
+        /* constant case */
+        if (vtop->r & VT_SYM) {
+            AVR_DEBUG("reolcation\n");
+            /* relocation case */
+            greloc(cur_text_section, vtop->sym,
+                   ind, R_AVR_13_PCREL);
+        } else {
+            AVR_DEBUG("reolcation PC\n");
+            /* put an empty PC32 relocation */
+            /*put_elf_reloc(symtab_section, cur_text_section,
+                          ind + 1, R_X86_64_PC32, 0);*/
+        }
+        //oad(0xe8 + is_jmp, vtop->c.ul - 4); /* call/jmp im */
+        if (is_jmp) {
+
+        } else {
+            o((0xD << 12) | (vtop->c.ul & 0xFFF));
+        }
+    } else {
+        AVR_DEBUG("indirect\n");
+        /* otherwise, indirect call */
+        //r = TREG_R11;
+        //load(r, vtop);
+        //o(0x41); /* REX */
+        //o(0xff); /* call/jmp *r */
+        //o(0xd0 + REG_VALUE(r) + (is_jmp << 4));
+    }
 }
 
-/* generate function call with address in (vtop->t, vtop->c) and free function
-   context. Stack entry is popped */
-ST_FUNC void gfunc_call(int nb_args)
-{
-    AVR_DEBUG("# gfunc_call(nb_args=%d)\n", nb_args);
-}
-
+#define NB_ARG_REGS 18
 static int arg_regs[] = {
     TREG_R25,
     TREG_R24,
@@ -459,6 +482,73 @@ static int arg_regs[] = {
     TREG_R9,
     TREG_R8,
 };
+
+static int arg_regs_class[] = {
+    RC_R25,
+    RC_R24,
+    RC_R23,
+    RC_R22,
+    RC_R21,
+    RC_R20,
+    RC_R19,
+    RC_R18,
+    //TREG_R17,
+    //TREG_R16,
+    //TREG_R15,
+    //TREG_R14,
+    //TREG_R13,
+    //TREG_R12,
+    //TREG_R11,
+    //TREG_R10,
+    //TREG_R9,
+    //TREG_R8,
+};
+
+/* generate function call with address in (vtop->t, vtop->c) and free function
+   context. Stack entry is popped */
+ST_FUNC void gfunc_call(int nb_args)
+{
+    AVR_DEBUG("# gfunc_call(nb_args=%d)\n", nb_args);
+    int size, type, align, args_size, i;
+    int reg_index = 0;
+
+    for (i = 0; i < nb_args; i++) {
+        type = vtop->type.t & VT_BTYPE;
+        if (type == VT_STRUCT ||
+            type == VT_LDOUBLE) {
+            tcc_error("Struct and long double arguments are not yet supported");
+        //} else if (is_sse_float(vtop->type.t)) {
+            //int j = --sse_reg;
+            //if (j < 8) {
+            //    gv(RC_FLOAT); /* only one float register */
+            //    /* movaps %xmm0, %xmmN */
+            //    o(0x280f);
+            //    o(0xc0 + (sse_reg << 3));
+            //}
+        } else {
+            if (reg_index < NB_ARG_REGS) {
+                size = type_size(vtop, &align);
+                switch (size) {
+                case 8:
+                    tcc_error("64-bit argument size is not yet supported");
+                case 4:
+                    tcc_error("32-bit argument size is not yet supported");
+                case 2: /* Choose the odd valued register */
+                    gv(arg_regs_class[reg_index]);
+                case 1: /* Choose the even-valued register */
+                    gv(arg_regs_class[reg_index+1]);
+                }
+                reg_index += size;
+            } else {
+                tcc_error("arguments passed by stack is not yet supported");
+            }
+        }
+        vtop--;
+    }
+
+    gcall_or_jmp(0);
+    vtop--;
+}
 
 /* generate function prolog of type 't' */
 ST_FUNC void gfunc_prolog(CType *func_type)
