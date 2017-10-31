@@ -824,7 +824,8 @@ ST_FUNC int gv(int rc)
             r = get_reg(rc);
 #ifndef TCC_TARGET_X86_64
 #ifdef TCC_TARGET_AVR
-            if ((vtop->type.t & VT_BTYPE) == VT_INT) {
+            if ((vtop->type.t & VT_BTYPE) == VT_INT ||
+                (vtop->type.t & VT_BTYPE) == VT_PTR) {
                 int r2;
                 unsigned int ui;
                 /* two register type load : expand to two words
@@ -2155,12 +2156,12 @@ ST_FUNC int type_size(CType *type, int *a)
 #endif
         return 8;
 #ifdef TCC_TARGET_AVR
-    } else if (bt == VT_INT || bt == VT_ENUM) {
-        *a = 2;
-        return 2;
     } else if (bt == VT_FLOAT || bt == VT_LONG) {
         *a = 4;
         return 4;
+    } else if (bt == VT_INT || bt == VT_ENUM) {
+        *a = 2;
+        return 2;
     } else if (bt == VT_SHORT) {
         *a = 1;
         return 1;
@@ -2604,7 +2605,8 @@ ST_FUNC void vstore(void)
 #ifndef TCC_TARGET_X86_64
 #ifdef TCC_TARGET_AVR
             /* two word case handling : store second register at word + 1 */
-            if ((ft & VT_BTYPE) == VT_INT) {
+            if ((ft & VT_BTYPE) == VT_INT || (ft & VT_BTYPE) == VT_PTR) {
+                char ptr = (ft & VT_BTYPE) == VT_PTR;
                 vswap();
                 /* convert to int to increment easily */
                 vtop->type.t = VT_INT;
@@ -2612,6 +2614,7 @@ ST_FUNC void vstore(void)
                 vpushi(1);
                 gen_op('+');
                 vtop->r |= VT_LVAL;
+                if (ptr) vtop->type.t = VT_PTR;
                 vswap();
                 /* XXX: it works because r2 is spilled last ! */
                 store(vtop->r2, vtop - 1);
@@ -3057,9 +3060,7 @@ static int parse_btype(CType *type, AttributeDef *ad)
                 t = (t & ~VT_BTYPE) | VT_LDOUBLE;
 #endif
             } else if ((t & VT_BTYPE) == VT_LONG) {
-#ifndef TCC_TARGET_AVR
                 t = (t & ~VT_BTYPE) | VT_LLONG;
-#endif
             } else {
                 u = VT_LONG;
                 goto basic_type1;
@@ -3200,7 +3201,7 @@ the_end:
 
     /* long is never used as type */
     if ((t & VT_BTYPE) == VT_LONG)
-#if !defined TCC_TARGET_X86_64 || defined TCC_TARGET_PE
+#if !defined TCC_TARGET_AVR && !defined TCC_TARGET_X86_64 || defined TCC_TARGET_PE
         t = (t & ~VT_BTYPE) | VT_INT;
 #else
         t = (t & ~VT_BTYPE) | VT_LLONG;
