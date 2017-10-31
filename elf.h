@@ -1728,4 +1728,13 @@ typedef Elf32_Addr Elf32_Conflict;
 #define R_C60HI16      0x55       // high 16 bit MVKH embedded
 #define R_C60LO16      0x54       // low 16 bit MVKL embedded
 
+/* AVR specific declarations */
+/* XXX: no ELF standard yet */
+
+/* TMS320C67xx relocs. */
+#define R_AVR_NONE      0
+#define R_AVR_32        1
+#define R_AVR_7_PCREL   2
+#define R_AVR_13_PCREL  3
+
 #endif  /* elf.h */
