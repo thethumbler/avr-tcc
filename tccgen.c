@@ -3199,6 +3199,12 @@ the_end:
     }
     t &= ~VT_SIGNED;
 
+#if defined TCC_TARGET_AVR
+    if ((t & VT_BTYPE) == VT_LONG || (t & VT_BTYPE) == VT_LLONG) {
+        tcc_error("long and long long types are not yet supported");
+    }
+#endif
+
     /* long is never used as type */
     if ((t & VT_BTYPE) == VT_LONG)
 #if !defined TCC_TARGET_AVR && !defined TCC_TARGET_X86_64 || defined TCC_TARGET_PE
