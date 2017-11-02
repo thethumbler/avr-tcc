@@ -1798,11 +1798,26 @@ ST_FUNC void gen_op(int op)
         tcc_error("comparison of struct");
     } else {
         /* integer operations */
+#ifdef TCC_TARGET_AVR
+        if (bt1 == VT_BYTE && bt2 == VT_BYTE) {
+            t = VT_BYTE;
+            if ((t1 & (VT_BTYPE | VT_UNSIGNED)) == (VT_BYTE | VT_UNSIGNED) ||
+                (t2 & (VT_BTYPE | VT_UNSIGNED)) == (VT_BYTE | VT_UNSIGNED))
+                t |= VT_UNSIGNED;
+        } else {
+            t = VT_INT;
+            /* convert to unsigned if it does not fit in an integer */
+            if ((t1 & (VT_BTYPE | VT_UNSIGNED)) == (VT_INT | VT_UNSIGNED) ||
+                (t2 & (VT_BTYPE | VT_UNSIGNED)) == (VT_INT | VT_UNSIGNED))
+                t |= VT_UNSIGNED;
+        }
+#else
         t = VT_INT;
         /* convert to unsigned if it does not fit in an integer */
         if ((t1 & (VT_BTYPE | VT_UNSIGNED)) == (VT_INT | VT_UNSIGNED) ||
             (t2 & (VT_BTYPE | VT_UNSIGNED)) == (VT_INT | VT_UNSIGNED))
             t |= VT_UNSIGNED;
+#endif
     std_op:
         /* XXX: currently, some unsigned operations are explicit, so
            we modify them here */
