@@ -283,6 +283,7 @@ ST_FUNC void load(int r, SValue *sv)
     fr = sv->r;
     ft = sv->type.t;
     fc = sv->c.ul;
+    AVR_DEBUG("fr = %X, ft=%X, fc=%d\n", fr, ft, fc);
 
     v = fr & VT_VALMASK;
     if (fr & VT_LVAL) {
@@ -305,7 +306,8 @@ ST_FUNC void load(int r, SValue *sv)
             //o(0xdb); /* fldt */
             //r = 5;
         } else if ((ft & VT_TYPE) == VT_BYTE) {
-            //o(0xbe0f);   /* movsbl */
+            AVR_DEBUG("ldd %s, Y%+d\n", reg_names[r], fc);
+            o4(0x8 | ((fc >> 4) & 0x2), (0xC & (fc >> 1)) | (reg_idx[r] >> 4), reg_idx[r] & 0xF, 0x8 | (fc & 0x7));
         } else if ((ft & VT_TYPE) == (VT_BYTE | VT_UNSIGNED)) {
             //o(0xb60f);   /* movzbl */
         } else if ((ft & VT_TYPE) == VT_SHORT) {
@@ -434,7 +436,7 @@ ST_FUNC void gcall_or_jmp(int is_jmp)
     if ((vtop->r & (VT_VALMASK | VT_LVAL)) == VT_CONST) {
         /* constant case */
         if (vtop->r & VT_SYM) {
-            AVR_DEBUG("reolcation\n");
+            AVR_DEBUG("rcall .%d\n", vtop->sym->c);
             /* relocation case */
             greloc(cur_text_section, vtop->sym,
                    ind, R_AVR_13_PCREL);
@@ -633,7 +635,7 @@ ST_FUNC void gen_opi(int op)
 {
     AVR_DEBUG("# gen_opi(op=%d)\n", op);
 
-    int r, _op;
+    int r, _op, t;
     unsigned c, _c;
 
     switch (op) {
@@ -645,28 +647,47 @@ ST_FUNC void gen_opi(int op)
             /* Immediate Operand */
             int r2;
             vswap();
-            r = gv(RC_INT);
-            r2 = vtop->r2;
+            t = vtop->type.t & VT_BTYPE;
+
+            if (t == VT_BYTE) {
+                r = gv(RC_BYTE);
+            } else {
+                r = gv(RC_INT);
+                r2 = vtop->r2;
+            }
+
             vswap();
             c = vtop->c.ui;
 
-            if (reg_idx[r] >= 24 && 
-                reg_idx[r2] == reg_idx[r] + 1 &&
-                c >> 6 < 2) { /* Could be done in utmost 2 ADIW operations */
-                while (c & 0x3F) {
-                    _c = c & 0x3F;
-                    AVR_DEBUG("adiw %s, %d\n", reg_names[r], c & 0x3F);
-                    c >>= 6;
+            if (t == VT_BYTE) {
+                if (reg_idx[r] >= 16) {   /* Can use subi */
+                    c = _op? c : -c;
+                    AVR_DEBUG("subi %s, %d\n", reg_names[r], c & 0xFF);
+                    o4(0x5, (c >> 4) & 0xF, reg_idx[r], c & 0xF);
+                } else {
+                    tcc_error("XXX: Operation on register unsupported");
                 }
-            } else if (reg_idx[r] >= 16) {   /* Can use subi and sbci */
-                c = -c;
-                AVR_DEBUG("subi %s, %d\n", reg_names[r], c & 0xFF);
-                o4(0x5, (c >> 4) & 0xF, reg_idx[r], c & 0xF);
-                c >>= 16;
-                AVR_DEBUG("sbci %s, %d\n", reg_names[r2], (c >> 8) & 0xFF);
-                o4(0x4, (c >> 4) & 0xF, reg_idx[r2], c & 0xF);
             } else {
-                tcc_error("XXX: Operation on register unsupported");
+                if (reg_idx[r] >= 24 && 
+                    reg_idx[r2] == reg_idx[r] + 1 &&
+                    c >> 6 < 2) { /* Could be done in utmost 2 ADIW operations */
+                    while (c & 0x3F) {
+                        _c = c & 0x3F;
+                        AVR_DEBUG("adiw %s, %d\n", reg_names[r], c & 0x3F);
+                        c >>= 6;
+                    }
+                } else if (reg_idx[r] >= 16) {   /* Can use subi and sbci */
+                    c = _op? c : -c;
+                    AVR_DEBUG("subi %s, %d\n", reg_names[r], c & 0xFF);
+                    o4(0x5, (c >> 4) & 0xF, reg_idx[r], c & 0xF);
+                    c >>= 16;
+                    if (c) {
+                        AVR_DEBUG("sbci %s, %d\n", reg_names[r2], (c >> 8) & 0xFF);
+                        o4(0x4, (c >> 4) & 0xF, reg_idx[r2], c & 0xF);
+                    }
+                } else {
+                    tcc_error("XXX: Operation on register unsupported");
+                }
             }
         } else {
             int r12, r21, r22;
