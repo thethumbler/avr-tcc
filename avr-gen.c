@@ -20,6 +20,7 @@
 
 #define AVR_DEBUG(...) fprintf(stderr, __VA_ARGS__)
 
+
 #ifdef TARGET_DEFS_ONLY
 
 /* number of available registers */
@@ -53,14 +54,14 @@
 
 /* pretty names for the registers */
 enum {
-    TREG_R18 = 0,
+    TREG_R24 = 0,
+    TREG_R25,
+    TREG_R18,
     TREG_R19,
     TREG_R20,
     TREG_R21,
     TREG_R22,
     TREG_R23,
-    TREG_R24,
-    TREG_R25,
     TREG_R26,
     TREG_R27,
     TREG_R28,
@@ -86,14 +87,14 @@ enum {
 };
 
 static int reg_idx[] =  {
+    24,
+    25,
     18,
     19,
     20,
     21,
     22,
     23,
-    24,
-    25,
     26,
     27,
     28,
@@ -119,14 +120,14 @@ static int reg_idx[] =  {
 };
 
 static char *reg_names[] =  {
+    "r24",
+    "r25",
     "r18",
     "r19",
     "r20",
     "r21",
     "r22",
     "r23",
-    "r24",
-    "r25",
     "r26",
     "r27",
     "r28",
@@ -171,7 +172,7 @@ static char *reg_names[] =  {
 #define LDOUBLE_SIZE  12
 #define LDOUBLE_ALIGN 4
 /* maximum alignment (for aligned attribute support) */
-#define MAX_ALIGN     2
+#define MAX_ALIGN     1
 
 /******************************************************/
 /* ELF defines */
@@ -193,14 +194,14 @@ static char *reg_names[] =  {
 #include "tcc.h"
 
 ST_DATA const int reg_classes[NB_REGS] = {
+    /* R24 */ RC_BYTE | RC_R24,
+    /* R25 */ RC_BYTE | RC_R25,
     /* R18 */ RC_BYTE | RC_R18,
     /* R19 */ RC_BYTE | RC_R19,
     /* R20 */ RC_BYTE | RC_R20,
     /* R21 */ RC_BYTE | RC_R21,
     /* R22 */ RC_BYTE | RC_R22,
     /* R23 */ RC_BYTE | RC_R23,
-    /* R24 */ RC_BYTE | RC_R24,
-    /* R25 */ RC_BYTE | RC_R25,
     /* R26 */ RC_BYTE,
     /* R27 */ RC_BYTE,
     /* R28 */ RC_BYTE,
@@ -253,15 +254,56 @@ void o4(unsigned char c1, unsigned char c2, unsigned char c3, unsigned char c4)
 
 /*****************************************************/
 
+/* AVR instruction emitters */
+/* Add with Carry */
+#define _ADC(d, r) o4(0x1, 0xC | (((r) >> 3) & 0x2) | ((d) >> 4), (d) & 0xF, (r) & 0xF)
+/* Add without Carry */ 
+#define _ADD(d, r) o4(0x0, 0xC | (((r) >> 3) & 0x2) | ((d) >> 4), (d) & 0xF, (r) & 0xF)
+/* Add Immediate to Word */
+#define _ADIW(d, k) o4(0x9, 0x6, (((k) >> 4) & 0xC) | ((d) & 0x3), (k) & 0xF)
+/* Logical AND */
+#define _AND(d, r) o4(0x2, (((r) >> 3) & 0x2) | ((d) >> 4), (d) & 0xF, (r) & 0xF)
+/* Branch if Bit in SREG is Set */
+#define _BRBS(s, k) o4(0xF, ((k) >> 5) & 0x3, ((k) >> 1) & 0xF, (((k) << 3) & 0x8) | ((s) & 0x7))
+/* Branch if Equal */
+#define _BREQ(k) _BRBS(0x1, k)
+/* Load Immediate */
+#define _LDI(d, k) o4(0xE, ((k) >> 4) & 0xF, (d) - 0x10, (k) & 0xF);
+/* Load Indirect from Data Space to Register using Index Y */
+#define _LDDYq(d, q) o4(0x8 | (((q) >> 4) & 0x2), (0xC & ((q) >> 1)) | ((d) >> 4), (d) & 0xF, 0x8 | ((q) & 0x7))
+/* Copy Register */
+#define _MOV(d, r) o4(0x2, 0xC | (((d) >> 3) & 0x2) | (((r) >> 4) & 1), (d) & 0xF, (r) & 0xF)
+/* Relative Call to Subroutine */
+#define _RCALL(k) o((0xD << 12) | ((k) & 0xFFF))
+/* Relative Jump */
+#define _RJMP(k) o((0xC << 12) | ((k) & 0xFFF))
+/* Return from Subroutine*/
+#define _RET() o(0x9508)
+/* Subtract with Carry */
+#define _SBC(d, r) o4(0x0, 0x8 | (((r) >> 3) & 0x2) | ((d) >> 4), (d) & 0xF, (r) & 0xF)
+/* Store Indirect From Register to Data Space using Index Y */
+#define _STDYq(r, q) o4(0x8 | (((q) >> 4) & 0x2), 0x2 | (((q) >> 1) & 0xC) | (((r) >> 4) & 1), (r) & 0xF, 0x8 | (q) & 0x7)
+/* Store Indirect From Register to Data Space using Index Z */
+#define _STZ(r) o4(0x8, 0x2 | (((r) >> 4) & 1), (r) & 0xF, 0)
+/* Subtract without Carry */
+#define _SUB(d, r) o4(0x1, 0x8 | (((r) >> 3) & 0x2) | ((d) >> 4), (d) & 0xF, (r) & 0xF)
+/* Subtract Immediate with Carry */
+#define _SBCI(d, k) o4(0x4, ((k) >> 4) & 0xF, (d), (k) & 0xF)
+/* Subtract Immediate */
+#define _SUBI(d, k) o4(0x5, ((k) >> 4) & 0xF, (d), (k) & 0xF)
+
+/*****************************************************/
+
 /* output a symbol and patch all calls to it */
 ST_FUNC void gsym_addr(int t, int a)
 {
     AVR_DEBUG("# gsym_addr(t=%d, a=%d)\n", t, a);
-    int n, *ptr;
+    unsigned short n, *ptr;
     while (t) {
-        ptr = (int *)(cur_text_section->data + t);
-        n = *ptr; /* next value */
-        *ptr = a - t - 4;
+        ptr = (unsigned short *)(cur_text_section->data + t);
+        n = (*ptr >> 3) & 0x7F; /* next value */
+        AVR_DEBUG("n = %X\n", n);
+        *ptr |= ((a - t - 2) >> 1) << 3;    /* XXX?!! */
         t = n;
     }
 }
@@ -286,67 +328,35 @@ ST_FUNC void load(int r, SValue *sv)
     AVR_DEBUG("fr = %X, ft=%X, fc=%d\n", fr, ft, fc);
 
     v = fr & VT_VALMASK;
-    if (fr & VT_LVAL) {
-        if (v == VT_LLOCAL) {
-            v1.type.t = VT_INT;
-            v1.r = VT_LOCAL | VT_LVAL;
-            v1.c.ul = fc;
-            fr = r;
-            if (!(reg_classes[fr] & RC_INT))
-                fr = get_reg(RC_INT);
-            load(fr, &v1);
-        }
-        if ((ft & VT_BTYPE) == VT_FLOAT) {
-            //o(0xd9); /* flds */
-            //r = 0;
-        } else if ((ft & VT_BTYPE) == VT_DOUBLE) {
-            //o(0xdd); /* fldl */
-            //r = 0;
-        } else if ((ft & VT_BTYPE) == VT_LDOUBLE) {
-            //o(0xdb); /* fldt */
-            //r = 5;
-        } else if ((ft & VT_TYPE) == VT_BYTE) {
-            AVR_DEBUG("ldd %s, Y%+d\n", reg_names[r], fc);
-            o4(0x8 | ((fc >> 4) & 0x2), (0xC & (fc >> 1)) | (reg_idx[r] >> 4), reg_idx[r] & 0xF, 0x8 | (fc & 0x7));
-        } else if ((ft & VT_TYPE) == (VT_BYTE | VT_UNSIGNED)) {
-            //o(0xb60f);   /* movzbl */
-        } else if ((ft & VT_TYPE) == VT_SHORT) {
-            //o(0xbf0f);   /* movswl */
-        } else if ((ft & VT_TYPE) == (VT_SHORT | VT_UNSIGNED)) {
-            //o(0xb70f);   /* movzwl */
-        } else {
-            AVR_DEBUG("ldd %s, Y%+d\n", reg_names[r], fc);
-        }
-        //gen_modrm(r, fr, sv->sym, fc);
-    } else {
-        if (v == VT_CONST) {
+    AVR_DEBUG("v = %X\n", v);
+
+    if ((fr & VT_LVAL) && (v == VT_LOCAL)) {
+        /* Load lvalue from stack */
+        fc = fc < 0? -fc : fc; /* XXX */
+        AVR_DEBUG("ldd %s, Y%+d\n", reg_names[r], fc);
+        _LDDYq(reg_idx[r], fc);
+    } else if (v == VT_CONST) {
+        /* Load immediate */
+        if (reg_idx[r] >= 16) {
             AVR_DEBUG("ldi %s, %d\n", reg_names[r], fc);
-            o4(0xE, (fc >> 4) & 0xF, reg_idx[r] - 0x10, fc & 0xF);
-        } else if (v == VT_LOCAL) {
-            if (fc) {
-                //o(0x8d); /* lea xxx(%ebp), r */
-                //gen_modrm(r, VT_LOCAL, sv->sym, fc);
-            } else {
-                //o(0x89);
-                //o(0xe8 + r); /* mov %ebp, r */
-            }
-        } else if (v == VT_CMP) {
-            //oad(0xb8 + r, 0); /* mov $0, r */
-            //o(0x0f); /* setxx %br */
-            //o(fc);
-            //o(0xc0 + r);
-        } else if (v == VT_JMP || v == VT_JMPI) {
-            //t = v & 1;
-            //oad(0xb8 + r, t); /* mov $1, r */
-            //o(0x05eb); /* jmp after */
-            //gsym(fc);
-            //oad(0xb8 + r, t ^ 1); /* mov $0, r */
-        } else if (v != r) {
-            AVR_DEBUG("mov %s, %s\n", reg_names[r], reg_names[v]);
-            r = reg_idx[r];
-            v = reg_idx[v];
-            o4(0x2, 0xC | ((r >> 3) & 0x2) | ((v >> 4) & 1), r & 0xF, v & 0xF);
+            _LDI(reg_idx[r], fc);
+        } else {
+            tcc_error("Unsupported\n");
         }
+    } else if (v == VT_CMP) {
+        //oad(0xb8 + r, 0); /* mov $0, r */
+        //o(0x0f); /* setxx %br */
+        //o(fc);
+        //o(0xc0 + r);
+    } else if (v == VT_JMP || v == VT_JMPI) {
+        //t = v & 1;
+        //oad(0xb8 + r, t); /* mov $1, r */
+        //o(0x05eb); /* jmp after */
+        //gsym(fc);
+        //oad(0xb8 + r, t ^ 1); /* mov $0, r */
+    } else if (v != r) {
+        AVR_DEBUG("mov %s, %s\n", reg_names[r], reg_names[v]);
+        _MOV(reg_idx[r], reg_idx[v]);
     }
 }
 
@@ -364,67 +374,44 @@ ST_FUNC void store(int r, SValue * v)
     bt = ft & VT_BTYPE;
     printf("ft = %x, fc = %x, fr = %x, bt = %x\n", ft, fc, v->r, bt);
 
-    if (bt == VT_FLOAT) {
-        //o(0xd9); /* fsts */
-        //r = 2;
-    } else if (bt == VT_DOUBLE) {
-        //o(0xdd); /* fstpl */
-        //r = 2;
-    } else if (bt == VT_LDOUBLE) {
-        //o(0xc0d9); /* fld %st(0) */
-        //o(0xdb); /* fstpt */
-        //r = 7;
-    } else {
-        if (bt == VT_SHORT) {
-            //o(0x66);
-        } if (bt == VT_BYTE || bt == VT_BOOL) {
-            //o(0x88);
-        } else {
-            //o(0x89);
-        }
-    }
-
     if (fr == VT_CONST) {   /* Constant memory reference */
+        if (v->r & VT_SYM) {
+            AVR_DEBUG("Relocation\n");
+        }
         AVR_DEBUG("ldi r30, %x\n", fc & 0xFF);
-        o(0xE000 | (((fc >> 4) & 0xF) << 8) | ((30 - 0x10) << 4) | (fc & 0xF));
+        _LDI(30, fc & 0xFF);
 
         fc >>= 8;
         AVR_DEBUG("ldi r31, %x\n", fc & 0xFF);
-        o(0xE000 | (((fc >> 4) & 0xF) << 8) | ((31 - 0x10) << 4) | (fc & 0xF));
+        _LDI(31, fc & 0xFF);
 
         AVR_DEBUG("st Z, %s\n", reg_names[r]);
-        r = reg_idx[r];
-        o4(0x8, 0x2 | ((r >> 4) & 1), r & 0xF, 0);
+        _STZ(reg_idx[r]);
+    } else if (fr == VT_LOCAL) {    /* Offset on stack */
+        fc = fc < 0? -fc : fc; /* XXX */
+        AVR_DEBUG("std Y%+d, %s\n", fc, reg_names[r]);
+        _STDYq(reg_idx[r], fc);
     } else if (v->r & VT_LVAL) {
         if (v->r & VT_LVAL_BYTE) {
             fc = -fc;
 
-            AVR_DEBUG("ldd r31, Y%+d\n", fc);
-            o4(0x8 | ((fc >> 4) & 2), ((fc >> 3) & 0xC) | ((31 >> 4) & 1), 31 & 0xF, 0x8 | (fc & 0x7));
+            AVR_DEBUG("mov r31, %s\n", reg_names[fr & VT_VALMASK]);
+            _MOV(31, reg_idx[fr & VT_VALMASK]);
 
-            --fc;
-            AVR_DEBUG("ldd r30, Y%+d\n", fc);
-            o4(0x8 | ((fc >> 4) & 2), ((fc >> 3) & 0xC) | ((30 >> 4) & 1), 30 & 0xF, 0x8 | (fc & 0x7));
+            AVR_DEBUG("mov r30, %s\n", reg_names[v->r2]);
+            _MOV(30, reg_idx[v->r2]);
 
             AVR_DEBUG("st Z, %s\n", reg_names[r]);
-            r = reg_idx[r];
-            o4(0x8, 0x2 | ((r >> 4) & 1), r & 0xF, 0);
+            _STZ(reg_idx[r]);
         } else {
-            fc = -fc;
-            AVR_DEBUG("std Y%+d, %s\n", fc, reg_names[r]);
-            r = reg_idx[r];
-            o4(0x8 | ((fc >> 5) & 1), 0x2 | ((fc >> 3) & 0x3) | ((r >> 4) & 1), r & 0xF, 0x8 | fc & 0x7);
+            if ((fr & VT_VALMASK) == VT_LOCAL) {
+                AVR_DEBUG("std Y%+d, %s\n", -fc, reg_names[r]);
+                _STDYq(reg_idx[r], -fc);
+            }
         }
-    } else if (fr == VT_LOCAL) {    /* Offset on stack */
-        fc = -fc;
-        AVR_DEBUG("std Y%+d, %s\n", fc, reg_names[r]);
-        r = reg_idx[r];
-        o(((0x8 | ((fc >> 5) & 1)) << 12) | ((0x2 | ((fc >> 3) & 0x3) | ((r >> 4) & 1)) << 8) | ((r & 0xF) << 4) | 0x8 | fc & 0x7);
     } else if (fr != r) {
         AVR_DEBUG("mov %s, %s\n", reg_names[fr], reg_names[r]);
-        fr = reg_idx[fr];
-        r = reg_idx[r];
-        o4(0x2, 0xC | ((fr >> 3) & 0x2) | ((r >> 4) & 1), fr & 0xF, r & 0xF);
+        _MOV(reg_idx[fr], reg_idx[r]);
     }
 }
 
@@ -436,7 +423,6 @@ ST_FUNC void gcall_or_jmp(int is_jmp)
     if ((vtop->r & (VT_VALMASK | VT_LVAL)) == VT_CONST) {
         /* constant case */
         if (vtop->r & VT_SYM) {
-            AVR_DEBUG("rcall .%d\n", vtop->sym->c);
             /* relocation case */
             greloc(cur_text_section, vtop->sym,
                    ind, R_AVR_13_PCREL);
@@ -450,7 +436,8 @@ ST_FUNC void gcall_or_jmp(int is_jmp)
         if (is_jmp) {
 
         } else {
-            o((0xD << 12) | (vtop->c.ul & 0xFFF));
+            AVR_DEBUG("rcall .%s\n", get_tok_str(vtop->sym->v, NULL));
+            _RCALL(vtop->c.ul);
         }
     } else {
         AVR_DEBUG("indirect\n");
@@ -608,7 +595,7 @@ ST_FUNC void gfunc_epilog(void)
 {
     AVR_DEBUG("# gfun_epilog()\n");
     AVR_DEBUG("ret\n");
-    o(0x9508);
+    _RET();
     AVR_DEBUG("//------------------------------------//\n");
 }
 
@@ -616,6 +603,10 @@ ST_FUNC void gfunc_epilog(void)
 ST_FUNC int gjmp(int t)
 {
     AVR_DEBUG("# gjmp(t=%d)\n", t);
+    int r = ind;
+    AVR_DEBUG("rjmp .%+d\n", t);
+    _RJMP(t);
+    return r;
 }
 
 /* generate a jump to a fixed address */
@@ -627,7 +618,66 @@ ST_FUNC void gjmp_addr(int a)
 /* generate a test. set 'inv' to invert test. Stack entry is popped */
 ST_FUNC int gtst(int inv, int t)
 {
-    AVR_DEBUG("# gstat(inv=%d, t=%d)\n", inv, t);
+    AVR_DEBUG("# gtst(inv=%d, t=%d)\n", inv, t);
+
+    int v, *p;
+
+    v = vtop->r & VT_VALMASK;
+    AVR_DEBUG("v = %X\n", v);
+    if (v == VT_CMP) {
+        /* fast case : can jump directly since flags are set */
+        //g(0x0f);
+        //t = psym((vtop->c.i - 16) ^ inv, t);
+    } else if (v == VT_JMP || v == VT_JMPI) {
+        /* && or || optimization */
+        //if ((v & 1) == inv) {
+        //    /* insert vtop->c jump list in t */
+        //    p = &vtop->c.i;
+        //    while (*p != 0)
+        //        p = (int *)(cur_text_section->data + *p);
+        //    *p = t;
+        //    t = vtop->c.i;
+        //} else {
+        //    t = gjmp(t);
+        //    gsym(vtop->c.i);
+        //}
+    } else {
+        //if (is_float(vtop->type.t) || 
+        //    (vtop->type.t & VT_BTYPE) == VT_LLONG) {
+        //    vpushi(0);
+        //    gen_op(TOK_NE);
+        //}
+        if ((vtop->r & (VT_VALMASK | VT_LVAL | VT_SYM)) == VT_CONST) {
+            /* constant jmp optimization */
+            if ((vtop->c.i != 0) != inv) 
+                t = gjmp(t);
+
+            /* Otherwise fall through */
+        } else {
+            int type = vtop->type.t;
+            if (type == VT_BYTE) {
+                v = gv(RC_BYTE);
+                AVR_DEBUG("and %s, %s\n", reg_names[v], reg_names[v]);
+                _AND(reg_idx[v], reg_idx[v]);
+                int r = ind;
+                AVR_DEBUG("breq .%+d\n", t);
+                _BREQ(t);
+                t = r;
+            } else if (type == VT_INT) {
+
+            } else {
+                /* XXX */
+            }
+        //    v = gv(RC_INT);
+        //    o(0x85);
+        //    o(0xc0 + v * 9);
+        //    g(0x0f);
+        //    t = psym(0x85 ^ inv, t);
+        }
+    }
+
+    --vtop;
+    return t;
 }
 
 /* generate an integer binary operation */
@@ -661,43 +711,66 @@ ST_FUNC void gen_opi(int op)
 
             if (t == VT_BYTE) {
                 if (reg_idx[r] >= 16) {   /* Can use subi */
-                    c = _op? c : -c;
+                    c = _op? -c : c;
                     AVR_DEBUG("subi %s, %d\n", reg_names[r], c & 0xFF);
-                    o4(0x5, (c >> 4) & 0xF, reg_idx[r], c & 0xF);
+                    _SUBI(reg_idx[r], c);
                 } else {
                     tcc_error("XXX: Operation on register unsupported");
                 }
             } else {
+                c = _op? -c : c;
+                AVR_DEBUG("r = %d, r2 = %d, c = %d\n", reg_idx[r], reg_idx[r2], c);
                 if (reg_idx[r] >= 24 && 
                     reg_idx[r2] == reg_idx[r] + 1 &&
                     c >> 6 < 2) { /* Could be done in utmost 2 ADIW operations */
                     while (c & 0x3F) {
                         _c = c & 0x3F;
                         AVR_DEBUG("adiw %s, %d\n", reg_names[r], c & 0x3F);
+                        _ADIW(reg_idx[r], c);
                         c >>= 6;
                     }
                 } else if (reg_idx[r] >= 16) {   /* Can use subi and sbci */
-                    c = _op? c : -c;
                     AVR_DEBUG("subi %s, %d\n", reg_names[r], c & 0xFF);
-                    o4(0x5, (c >> 4) & 0xF, reg_idx[r], c & 0xF);
+                    _SUBI(reg_idx[r], c & 0xFF);
                     c >>= 16;
-                    if (c) {
-                        AVR_DEBUG("sbci %s, %d\n", reg_names[r2], (c >> 8) & 0xFF);
-                        o4(0x4, (c >> 4) & 0xF, reg_idx[r2], c & 0xF);
-                    }
+                    AVR_DEBUG("sbci %s, %d\n", reg_names[r2], c & 0xFF);
+                    _SBCI(reg_idx[r2], c & 0xFF);
                 } else {
                     tcc_error("XXX: Operation on register unsupported");
                 }
             }
         } else {
-            int r12, r21, r22;
-            gv2(RC_INT, RC_INT);
-            r = vtop[0].r;
-            r12 = vtop[0].r2;
-            r21 = vtop[-1].r;
-            r22 = vtop[-1].r2;
-            AVR_DEBUG("%s %s, %s\n", _op? "sub" : "add", reg_names[r], reg_names[r21]);
-            AVR_DEBUG("%s %s, %s\n", _op? "sbc" : "adc", reg_names[r12], reg_names[r22]);
+            if (vtop->type.t == VT_BYTE) {
+                int r2;
+                gv2(RC_BYTE, RC_BYTE);
+                r = vtop[0].r;
+                r2 = vtop[-1].r;
+                if (!_op) {  /* Add */
+                    AVR_DEBUG("add %s, %s\n", reg_names[r2], reg_names[r]);
+                    _ADD(reg_idx[r2], reg_idx[r]);
+                } else { /* Sub */
+                    AVR_DEBUG("sub %s, %s\n", reg_names[r2], reg_names[r]);
+                    _SUB(reg_idx[r2], reg_idx[r]);
+                }
+            } else {
+                int r12, r21, r22;
+                gv2(RC_INT, RC_INT);
+                r = vtop[0].r;
+                r12 = vtop[0].r2;
+                r21 = vtop[-1].r;
+                r22 = vtop[-1].r2;
+                if (_op) {
+                    AVR_DEBUG("%s %s, %s\n", "sub", reg_names[r], reg_names[r21]);
+                    _SUB(reg_idx[r], reg_idx[r21]);
+                    AVR_DEBUG("%s %s, %s\n", "sbc", reg_names[r12], reg_names[r22]);
+                    _SBC(reg_idx[r12], reg_idx[r22]);
+                } else {
+                    AVR_DEBUG("%s %s, %s\n", "add", reg_names[r], reg_names[r21]);
+                    _ADD(reg_idx[r], reg_idx[r21]);
+                    AVR_DEBUG("%s %s, %s\n", "adc", reg_names[r12], reg_names[r22]);
+                    _ADC(reg_idx[r12], reg_idx[r22]);
+                }
+            }
         }
 
         vtop--;

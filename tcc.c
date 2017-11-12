@@ -209,6 +209,8 @@ static void display_info(TCCState *s, int what)
 # ifdef TCC_TARGET_PE
         " WinCE"
 # endif
+#elif defined TCC_TARGET_AVR
+        "AVR"
 #endif
 #ifndef TCC_TARGET_PE
 # ifdef __linux

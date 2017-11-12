@@ -824,16 +824,36 @@ ST_FUNC int gv(int rc)
             r = get_reg(rc);
 #ifndef TCC_TARGET_X86_64
 #ifdef TCC_TARGET_AVR
-            if ((vtop->type.t & VT_BTYPE) == VT_INT ||
-                (vtop->type.t & VT_BTYPE) == VT_PTR) {
+            printf("r = %X, type = %X\n", vtop->r, vtop->type.t);
+            if ((vtop->type.t & VT_BTYPE) == VT_PTR &&
+                (vtop->r & (VT_VALMASK | VT_LVAL)) == VT_LOCAL) {
+                /* Load address of local variable */
+                vtop->r = r;
+                int r2;
+                /* Load registers r2:r1 from register Y */
+                vpushi(0);  /* Push dummy */
+                vtop->r = TREG_R28;
+                load(r, vtop);
+
+                r2 = get_reg(rc2);
+                vtop->r = TREG_R29;
+                load(r2, vtop);
+                --vtop;
+                vtop->r2 = r2;
+
+                /* Add offset */
+                vpushi(vtop->c.ul);
+                gen_op('+');
+            } else if ((vtop->type.t & VT_BTYPE) == VT_INT ||
+                       (vtop->type.t & VT_BTYPE) == VT_SHORT ||
+                       (vtop->type.t & VT_BTYPE) == VT_PTR) {
+                /* Two registers load */
                 int r2;
                 unsigned int ui;
-                /* two register type load : expand to two words
-                   temporarily */
                 if ((vtop->r & (VT_VALMASK | VT_LVAL)) == VT_CONST) {
                     /* load constant */
-                    ui = vtop->c.ui & 0xFF;
-                    vtop->c.ui = ui; /* first word */
+                    ui = vtop->c.ui & 0xFFFF;
+                    vtop->c.ui = ui & 0xFF; /* first word */
                     load(r, vtop);
                     vtop->r = r; /* save register value */
                     vpushi(ui >> 8); /* second word */
@@ -1626,6 +1646,9 @@ static inline int is_null_pointer(SValue *p)
 static inline int is_integer_btype(int bt)
 {
     return (bt == VT_BYTE || bt == VT_SHORT || 
+#ifdef TCC_TARGET_AVR
+            bt == VT_LONG ||
+#endif
             bt == VT_INT || bt == VT_LLONG);
 }
 
@@ -2174,12 +2197,9 @@ ST_FUNC int type_size(CType *type, int *a)
     } else if (bt == VT_FLOAT || bt == VT_LONG) {
         *a = 4;
         return 4;
-    } else if (bt == VT_INT || bt == VT_ENUM) {
+    } else if (bt == VT_SHORT || bt == VT_INT || bt == VT_ENUM) {
         *a = 2;
         return 2;
-    } else if (bt == VT_SHORT) {
-        *a = 1;
-        return 1;
 #else
     } else if (bt == VT_INT || bt == VT_ENUM || bt == VT_FLOAT) {
         *a = 4;
@@ -2453,6 +2473,9 @@ static void gen_assign_cast(CType *dt)
     case VT_BYTE:
     case VT_SHORT:
     case VT_INT:
+#ifdef TCC_TARGET_AVR
+    case VT_LONG:
+#endif
     case VT_LLONG:
         if (sbt == VT_PTR || sbt == VT_FUNC) {
             tcc_warning("assignment makes integer from pointer without a cast");
@@ -2485,6 +2508,12 @@ ST_FUNC void vstore(void)
     ft = vtop[-1].type.t;
     sbt = vtop->type.t & VT_BTYPE;
     dbt = ft & VT_BTYPE;
+    printf("sbt = %X, dbt=%X\n", sbt, dbt);
+#ifdef TCC_TARGET_AVR
+    delayed_cast = 0;
+    if (!(ft & VT_BITFIELD))
+        gen_assign_cast(&vtop[-1].type);
+#else
     if ((((sbt == VT_INT || sbt == VT_SHORT) && dbt == VT_BYTE) ||
          (sbt == VT_INT && dbt == VT_SHORT))
 	&& !(vtop->type.t & VT_BITFIELD)) {
@@ -2499,6 +2528,7 @@ ST_FUNC void vstore(void)
         if (!(ft & VT_BITFIELD))
             gen_assign_cast(&vtop[-1].type);
     }
+#endif
 
     if (sbt == VT_STRUCT) {
         /* if structure, only generate pointer */
@@ -2592,6 +2622,18 @@ ST_FUNC void vstore(void)
         }
 #endif
         if (!nocode_wanted) {
+#ifdef TCC_TARGET_AVR
+            switch (ft & VT_BTYPE) {
+            case VT_BYTE:
+                rc = RC_BYTE;
+                break;
+            case VT_PTR:
+            case VT_SHORT:
+            case VT_INT:
+                rc = RC_INT;
+                break;
+            }
+#else
             rc = RC_INT;
             if (is_float(ft)) {
                 rc = RC_FLOAT;
@@ -2601,6 +2643,7 @@ ST_FUNC void vstore(void)
                 }
 #endif
             }
+#endif
             r = gv(rc);  /* generate value */
             /* if lvalue was saved on stack, must read it */
             if ((vtop[-1].r & VT_VALMASK) == VT_LLOCAL) {
@@ -2617,11 +2660,11 @@ ST_FUNC void vstore(void)
                 vtop[-1].r = t | VT_LVAL;
             }
             store(r, vtop - 1);
-#ifndef TCC_TARGET_X86_64
 #ifdef TCC_TARGET_AVR
-            /* two word case handling : store second register at word + 1 */
-            if ((ft & VT_BTYPE) == VT_INT || (ft & VT_BTYPE) == VT_PTR) {
-                char ptr = (ft & VT_BTYPE) == VT_PTR;
+            switch (ft & VT_BTYPE) {
+            case VT_SHORT:
+            case VT_INT:
+            case VT_PTR:
                 vswap();
                 /* convert to int to increment easily */
                 vtop->type.t = VT_INT;
@@ -2629,12 +2672,11 @@ ST_FUNC void vstore(void)
                 vpushi(1);
                 gen_op('+');
                 vtop->r |= VT_LVAL;
-                if (ptr) vtop->type.t = VT_PTR;
                 vswap();
-                /* XXX: it works because r2 is spilled last ! */
                 store(vtop->r2, vtop - 1);
             }
-#else
+#endif
+#ifndef TCC_TARGET_X86_64
             /* two word case handling : store second register at word + 4 */
             if ((ft & VT_BTYPE) == VT_LLONG) {
                 vswap();
@@ -2648,7 +2690,6 @@ ST_FUNC void vstore(void)
                 /* XXX: it works because r2 is spilled last ! */
                 store(vtop->r2, vtop - 1);
             }
-#endif
 #endif
         }
         vswap();
@@ -3218,6 +3259,16 @@ the_end:
     if ((t & VT_BTYPE) == VT_LONG || (t & VT_BTYPE) == VT_LLONG) {
         tcc_error("long and long long types are not yet supported");
     }
+
+    /* By default, int is short int in AVR */
+    if ((t & VT_BTYPE) == VT_SHORT) {
+        t = (t & ~VT_BTYPE) | VT_INT;
+    }
+
+    /* We use long type */
+
+    type->t = t;
+    return type_found;
 #endif
 
     /* long is never used as type */
