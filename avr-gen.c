@@ -255,6 +255,9 @@ void o4(unsigned char c1, unsigned char c2, unsigned char c3, unsigned char c4)
 /*****************************************************/
 
 /* AVR instruction emitters */
+/*
+ *  Arithmetic and Logic instructions
+ */
 /* Add with Carry */
 #define _ADC(d, r) o4(0x1, 0xC | (((r) >> 3) & 0x2) | ((d) >> 4), (d) & 0xF, (r) & 0xF)
 /* Add without Carry */ 
@@ -263,34 +266,46 @@ void o4(unsigned char c1, unsigned char c2, unsigned char c3, unsigned char c4)
 #define _ADIW(d, k) o4(0x9, 0x6, (((k) >> 4) & 0xC) | ((d) & 0x3), (k) & 0xF)
 /* Logical AND */
 #define _AND(d, r) o4(0x2, (((r) >> 3) & 0x2) | ((d) >> 4), (d) & 0xF, (r) & 0xF)
-/* Branch if Bit in SREG is Set */
-#define _BRBS(s, k) o4(0xF, ((k) >> 5) & 0x3, ((k) >> 1) & 0xF, (((k) << 3) & 0x8) | ((s) & 0x7))
-/* Branch if Equal */
-#define _BREQ(k) _BRBS(0x1, k)
-/* Load Immediate */
-#define _LDI(d, k) o4(0xE, ((k) >> 4) & 0xF, (d) - 0x10, (k) & 0xF);
-/* Load Indirect from Data Space to Register using Index Y */
-#define _LDDYq(d, q) o4(0x8 | (((q) >> 4) & 0x2), (0xC & ((q) >> 1)) | ((d) >> 4), (d) & 0xF, 0x8 | ((q) & 0x7))
-/* Copy Register */
-#define _MOV(d, r) o4(0x2, 0xC | (((d) >> 3) & 0x2) | (((r) >> 4) & 1), (d) & 0xF, (r) & 0xF)
-/* Relative Call to Subroutine */
-#define _RCALL(k) o((0xD << 12) | ((k) & 0xFFF))
-/* Relative Jump */
-#define _RJMP(k) o((0xC << 12) | ((k) & 0xFFF))
-/* Return from Subroutine*/
-#define _RET() o(0x9508)
 /* Subtract with Carry */
 #define _SBC(d, r) o4(0x0, 0x8 | (((r) >> 3) & 0x2) | ((d) >> 4), (d) & 0xF, (r) & 0xF)
-/* Store Indirect From Register to Data Space using Index Y */
-#define _STDYq(r, q) o4(0x8 | (((q) >> 4) & 0x2), 0x2 | (((q) >> 1) & 0xC) | (((r) >> 4) & 1), (r) & 0xF, 0x8 | (q) & 0x7)
-/* Store Indirect From Register to Data Space using Index Z */
-#define _STZ(r) o4(0x8, 0x2 | (((r) >> 4) & 1), (r) & 0xF, 0)
 /* Subtract without Carry */
 #define _SUB(d, r) o4(0x1, 0x8 | (((r) >> 3) & 0x2) | ((d) >> 4), (d) & 0xF, (r) & 0xF)
 /* Subtract Immediate with Carry */
 #define _SBCI(d, k) o4(0x4, ((k) >> 4) & 0xF, (d), (k) & 0xF)
 /* Subtract Immediate */
 #define _SUBI(d, k) o4(0x5, ((k) >> 4) & 0xF, (d), (k) & 0xF)
+
+/*
+ *  Branch instructions
+ */
+/* Branch if Bit in SREG is Set */
+#define _BRBS(s, k) o4(0xF, ((k) >> 5) & 0x3, ((k) >> 1) & 0xF, (((k) << 3) & 0x8) | ((s) & 0x7))
+/* Branch if Equal */
+#define _BREQ(k) _BRBS(0x1, k)
+/* Branch if Less Than */
+#define _BRLT(k) _BRBS(0x4, k)
+/* Compare with Immediate */
+#define _CPI(r, k) o4(0x3, (k) >> 4, (r), (k) & 0xFF);
+/* Relative Call to Subroutine */
+#define _RCALL(k) o((0xD << 12) | ((k) & 0xFFF))
+/* Relative Jump */
+#define _RJMP(k) o((0xC << 12) | ((k) & 0xFFF))
+/* Return from Subroutine*/
+#define _RET() o(0x9508)
+
+/*
+ *  Data Transfer instructions
+ */
+/* Load Immediate */
+#define _LDI(d, k) o4(0xE, ((k) >> 4) & 0xF, (d) - 0x10, (k) & 0xF);
+/* Load Indirect from Data Space to Register using Index Y */
+#define _LDDYq(d, q) o4(0x8 | (((q) >> 4) & 0x2), (0xC & ((q) >> 1)) | ((d) >> 4), (d) & 0xF, 0x8 | ((q) & 0x7))
+/* Copy Register */
+#define _MOV(d, r) o4(0x2, 0xC | (((d) >> 3) & 0x2) | (((r) >> 4) & 1), (d) & 0xF, (r) & 0xF)
+/* Store Indirect From Register to Data Space using Index Y */
+#define _STDYq(r, q) o4(0x8 | (((q) >> 4) & 0x2), 0x2 | (((q) >> 1) & 0xC) | (((r) >> 4) & 1), (r) & 0xF, 0x8 | (q) & 0x7)
+/* Store Indirect From Register to Data Space using Index Z */
+#define _STZ(r) o4(0x8, 0x2 | (((r) >> 4) & 1), (r) & 0xF, 0)
 
 /*****************************************************/
 
@@ -626,6 +641,14 @@ ST_FUNC int gtst(int inv, int t)
     AVR_DEBUG("v = %X\n", v);
     if (v == VT_CMP) {
         /* fast case : can jump directly since flags are set */
+        switch ((vtop->c.ui)) {
+        case TOK_GT:
+            v = ind;
+            AVR_DEBUG("brlt .%+d\n", t);
+            _BRLT(t);
+            t = v;
+        }
+        AVR_DEBUG("c %X\n", vtop->c.i);
         //g(0x0f);
         //t = psym((vtop->c.i - 16) ^ inv, t);
     } else if (v == VT_JMP || v == VT_JMPI) {
@@ -710,12 +733,19 @@ ST_FUNC void gen_opi(int op)
             c = vtop->c.ui;
 
             if (t == VT_BYTE) {
-                if (reg_idx[r] >= 16) {   /* Can use subi */
-                    c = _op? -c : c;
-                    AVR_DEBUG("subi %s, %d\n", reg_names[r], c & 0xFF);
-                    _SUBI(reg_idx[r], c);
-                } else {
-                    tcc_error("XXX: Operation on register unsupported");
+                switch (_op) {
+                case TOK_GT:
+                    AVR_DEBUG("cpi %s, %d\n", reg_names[r], c+1);
+                    _CPI(reg_idx[r], c+1);
+                    break;
+                default:
+                    if (reg_idx[r] >= 16) {   /* Can use subi */
+                        c = _op? -c : c;
+                        AVR_DEBUG("subi %s, %d\n", reg_names[r], c & 0xFF);
+                        _SUBI(reg_idx[r], c);
+                    } else {
+                        tcc_error("XXX: Operation on register unsupported");
+                    }
                 }
             } else {
                 c = _op? -c : c;
@@ -782,6 +812,9 @@ ST_FUNC void gen_opi(int op)
     case '-':
     case TOK_SUBC1: /* sub with carry generation */
         _op = 1;
+        goto gen_op;
+    case TOK_GT:
+        _op = TOK_GT;
         goto gen_op;
     }
 }
