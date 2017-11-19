@@ -280,8 +280,12 @@ void o4(unsigned char c1, unsigned char c2, unsigned char c3, unsigned char c4)
  */
 /* Branch if Bit in SREG is Set */
 #define _BRBS(s, k) o4(0xF, ((k) >> 5) & 0x3, ((k) >> 1) & 0xF, (((k) << 3) & 0x8) | ((s) & 0x7))
+/* Branch if Bit in SREG is Clear */
+#define _BRBC(s, k) o4(0xF, (0x4) | (((k) >> 5) & 0x3), ((k) >> 1) & 0xF, (((k) << 3) & 0x8) | ((s) & 0x7))
 /* Branch if Equal */
 #define _BREQ(k) _BRBS(0x1, k)
+/* Branch if Greater or Equal (Signed) */
+#define _BRGE(k) _BRBC(0x4, k)
 /* Branch if Less Than */
 #define _BRLT(k) _BRBS(0x4, k)
 /* Compare with Immediate */
@@ -641,16 +645,18 @@ ST_FUNC int gtst(int inv, int t)
     AVR_DEBUG("v = %X\n", v);
     if (v == VT_CMP) {
         /* fast case : can jump directly since flags are set */
+        v = ind;
         switch ((vtop->c.ui)) {
         case TOK_GT:
-            v = ind;
             AVR_DEBUG("brlt .%+d\n", t);
             _BRLT(t);
-            t = v;
+            break;
+        case TOK_LT:
+            AVR_DEBUG("brge .%+d\n", t);
+            _BRGE(t);
+            break;
         }
-        AVR_DEBUG("c %X\n", vtop->c.i);
-        //g(0x0f);
-        //t = psym((vtop->c.i - 16) ^ inv, t);
+        t = v;
     } else if (v == VT_JMP || v == VT_JMPI) {
         /* && or || optimization */
         //if ((v & 1) == inv) {
@@ -735,8 +741,10 @@ ST_FUNC void gen_opi(int op)
             if (t == VT_BYTE) {
                 switch (_op) {
                 case TOK_GT:
-                    AVR_DEBUG("cpi %s, %d\n", reg_names[r], c+1);
-                    _CPI(reg_idx[r], c+1);
+                    c += 1;
+                case TOK_LT:
+                    AVR_DEBUG("cpi %s, %d\n", reg_names[r], c);
+                    _CPI(reg_idx[r], c);
                     break;
                 default:
                     if (reg_idx[r] >= 16) {   /* Can use subi */
@@ -814,7 +822,8 @@ ST_FUNC void gen_opi(int op)
         _op = 1;
         goto gen_op;
     case TOK_GT:
-        _op = TOK_GT;
+    case TOK_LT:
+        _op = op;
         goto gen_op;
     }
 }
